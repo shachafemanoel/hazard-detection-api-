@@ -7,7 +7,6 @@ opencv-python-headless==4.8.1.78
 ultralytics==8.0.196
 torch==2.1.0
 torchvision==0.16.0
-openvino==2023.2.0
 py-cpuinfo==9.0.0
 python-dotenv==1.0.0
 pydantic==2.5.0
