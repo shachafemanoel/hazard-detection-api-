@@ -12,7 +12,7 @@ restartPolicyMaxRetries = 3
 [deploy.kv]
 PORT = "8000"
 API_PORT = "8000"
-MODEL_DIR = "/app/models"
+MODEL_DIR = "/app/best_openvino_model"
 MODEL_BACKEND = "auto"
 PYTHONPATH = "/app"
 
