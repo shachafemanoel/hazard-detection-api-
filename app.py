@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from PIL import Image
 from io import BytesIO
 
@@ -47,7 +48,14 @@ except ImportError:
         upload_detection_image = None  
         cache_detection_result = None
 
-app = FastAPI(title="Hazard Detection Backend", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await load_model()
+    yield
+
+
+app = FastAPI(title="Hazard Detection Backend", version="1.0.0", lifespan=lifespan)
 
 # Enhanced CORS configuration for Render deployment
 import os
@@ -146,7 +154,6 @@ TRACKING_TIME_THRESHOLD = 2.0  # seconds
 MIN_CONFIDENCE_FOR_REPORT = 0.6
 
 # Enhanced model loading with intelligent backend selection
-@app.on_event("startup")
 async def load_model():
     global core, compiled_model, input_layer, output_layer, torch_model, USE_OPENVINO
     print("🚀 FASTAPI STARTUP - Intelligent model loading begins...")
