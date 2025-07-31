@@ -1,28 +1,33 @@
+
 # api/Dockerfile
-# 1) Build dependencies only in builder
+# ========================
+# Stage 1 - build Python dependencies
 FROM python:3.11-slim AS builder
-WORKDIR /app
+WORKDIR /wheels
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc libglib2.0-0 libsm6 libxext6 libgomp1 \
-    libusb-1.0-0-dev libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
-    pkg-config wget curl \
+    build-essential gcc \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Pre-build wheels for faster install in the runtime image
+RUN pip wheel --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
 
-# 2) Final runtime with only runtime libs
-FROM python:3.11-slim
+# Stage 2 - runtime image
+FROM python:3.11-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgl1-mesa-glx libsm6 libxext6 \
-    libxrender-dev libgomp1 pkg-config wget curl \
+    libglib2.0-0 libgl1-mesa-glx libsm6 libxext6 libgomp1 \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
-# העתקת כל ה-Python packages מהמכולה של ה-builder
-COPY --from=builder /install /usr/local
+# Install Python packages from the builder stage
+COPY --from=builder /wheels /tmp/wheels
+RUN pip install --no-cache-dir /tmp/wheels/* && rm -rf /tmp/wheels
 
 # העתקת קוד ה-API שלך
 COPY . .

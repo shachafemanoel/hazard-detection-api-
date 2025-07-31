@@ -2,3 +2,5 @@ __pycache__
 *.pyc
 .git
 models/
+best.pt
+best_openvino_model/
