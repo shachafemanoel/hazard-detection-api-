@@ -196,9 +196,10 @@ async def load_model():
     logger.warning("Primary model loading failed, trying fallback locations...")
     fallback_locations = [
         '/app/models/pytorch',
-        '/app/models/openvino', 
-        '/app/api',
-        '/app/public/object_detecion_model'
+        '/app/models/openvino',
+        '/app/openvino',
+        '/app/public/object_detection_model',
+        '/app'
     ]
     
     for fallback_dir in fallback_locations:
@@ -619,7 +620,7 @@ async def health_check():
                 "device": DEVICE_NAME,
                 "input_shape": list(input_layer.shape),
                 "output_shape": list(output_layer.shape),
-                "model_path": os.path.join(os.getenv('MODEL_DIR', 'api/best_openvino_model'), "best.xml"),
+                "model_path": os.path.join(os.getenv('MODEL_DIR', '/app/openvino'), "best.xml"),
                 "cache_enabled": CACHE_ENABLED
             }
         except Exception as e:
