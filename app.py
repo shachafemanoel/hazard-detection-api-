@@ -11,12 +11,24 @@ except Exception:
     ov = None
     props = None
 
+# Log availability of OpenVINO runtime early so it appears in Railway logs
+if ov is not None:
+    logging.info("OpenVINO runtime available")
+else:
+    logging.info("OpenVINO runtime not available")
+
 try:
     from ultralytics import YOLO
     import torch
 except Exception:
     YOLO = None
     torch = None
+
+# Log availability of the YOLO runtime
+if YOLO is not None:
+    logging.info("YOLO runtime available")
+else:
+    logging.info("YOLO runtime not available")
 
 try:
     from cpuinfo import get_cpu_info
@@ -156,10 +168,10 @@ MIN_CONFIDENCE_FOR_REPORT = 0.6
 # Enhanced model loading with intelligent backend selection
 async def load_model():
     global core, compiled_model, input_layer, output_layer, torch_model, USE_OPENVINO
-    print("🚀 FASTAPI STARTUP - Intelligent model loading begins...")
-    print(f"🔍 Current working directory: {os.getcwd()}")
-    print(f"🌍 MODEL_DIR environment: {os.getenv('MODEL_DIR', 'NOT SET')}")
-    print(f"🧠 MODEL_BACKEND environment: {os.getenv('MODEL_BACKEND', 'NOT SET')}")
+    logger.info("🚀 FASTAPI STARTUP - Intelligent model loading begins...")
+    logger.info(f"🔍 Current working directory: {os.getcwd()}")
+    logger.info(f"🌍 MODEL_DIR environment: {os.getenv('MODEL_DIR', 'NOT SET')}")
+    logger.info(f"🧠 MODEL_BACKEND environment: {os.getenv('MODEL_BACKEND', 'NOT SET')}")
     
     # Get the intelligent model selection from environment
     selected_backend = os.getenv('MODEL_BACKEND', 'auto').lower()
@@ -185,11 +197,13 @@ async def load_model():
     if selected_backend in ['openvino', 'auto']:
         success = await try_load_openvino_model(model_dir)
         if success:
+            logger.info("🚀 Using OpenVINO backend for inference")
             return
     
     if selected_backend in ['pytorch', 'auto']:
         success = await try_load_pytorch_model(model_dir)
         if success:
+            logger.info("🚀 Using YOLO PyTorch backend for inference")
             return
     
     # If both fail, try fallback locations
@@ -205,8 +219,10 @@ async def load_model():
         if os.path.exists(fallback_dir):
             logger.info(f"🔄 Trying fallback location: {fallback_dir}")
             if await try_load_pytorch_model(fallback_dir):
+                logger.info("🚀 Using YOLO PyTorch backend for inference")
                 return
             if await try_load_openvino_model(fallback_dir):
+                logger.info("🚀 Using OpenVINO backend for inference")
                 return
     
     logger.error("❌ All model loading attempts failed!")
