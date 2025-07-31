@@ -631,8 +631,13 @@ async def health_check():
         "mobile_friendly": True
     }
     
-    # Check external API connectivity
-    api_health = await api_manager.health_check()
+    # Check external API connectivity if available
+    api_health = None
+    if api_manager is not None:
+        try:
+            api_health = await api_manager.health_check()
+        except Exception as e:
+            logger.warning(f"API health check failed: {e}")
     
     return {
         "status": "healthy",
@@ -1034,6 +1039,9 @@ async def detect_hazards_legacy(file: UploadFile = File(...)):
 @app.get("/api/health")
 async def api_health_check():
     """Check health of all external API services"""
+    if api_manager is None:
+        raise HTTPException(status_code=503, detail="api_manager not configured")
+
     try:
         health_status = await api_manager.health_check()
         return {
@@ -1048,6 +1056,9 @@ async def api_health_check():
 @app.post("/api/geocode")
 async def geocode_address_endpoint(address: str):
     """Geocode an address to coordinates"""
+    if geocode_location is None:
+        raise HTTPException(status_code=503, detail="Geocoding service unavailable")
+
     try:
         response = await geocode_location(address)
         if response.success:
@@ -1067,6 +1078,10 @@ async def reverse_geocode_endpoint(lat: float, lng: float):
     """Reverse geocode coordinates to address"""
     try:
         from api_connectors import reverse_geocode_location
+    except Exception:
+        raise HTTPException(status_code=503, detail="Reverse geocoding service unavailable")
+
+    try:
         response = await reverse_geocode_location(lat, lng)
         if response.success:
             return {
@@ -1083,6 +1098,9 @@ async def reverse_geocode_endpoint(lat: float, lng: float):
 @app.post("/api/cache-detection")
 async def cache_detection_endpoint(detection_id: str, detection_data: dict):
     """Cache detection result"""
+    if cache_detection_result is None:
+        raise HTTPException(status_code=503, detail="Caching service unavailable")
+
     try:
         response = await cache_detection_result(detection_id, detection_data)
         if response.success:
@@ -1100,6 +1118,9 @@ async def cache_detection_endpoint(detection_id: str, detection_data: dict):
 @app.get("/api/render/status")
 async def render_status():
     """Get Render deployment status"""
+    if api_manager is None or getattr(api_manager, "render", None) is None:
+        raise HTTPException(status_code=503, detail="Render service unavailable")
+
     try:
         response = await api_manager.render.get_services()
         if response.success:
