@@ -1161,7 +1161,7 @@ async def render_status():
 # Add main entry point for Render deployment
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     
     # Log startup information
     logger.info(f"Starting FastAPI server on port {port}")
