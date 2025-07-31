@@ -4,21 +4,24 @@ FROM python:3.11-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential gcc libglib2.0-0 libsm6 libxext6 libgomp1 \
-    libusb-1.0-0-dev libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
-    pkg-config wget curl \
+    build-essential gcc \
+    libglib2.0-0 libsm6 libxext6 libgl1-mesa-glx libgomp1 \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Install Python dependencies with CPU-optimized wheels for faster builds
+RUN pip install --no-cache-dir --prefix=/install \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt
 
 # 2) Final runtime with only runtime libs
 FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgl1-mesa-glx libsm6 libxext6 \
-    libxrender-dev libgomp1 pkg-config wget curl \
+    libglib2.0-0 libgl1-mesa-glx libsm6 libxext6 libgomp1 \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
 # העתקת כל ה-Python packages מהמכולה של ה-builder
