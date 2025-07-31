@@ -36,7 +36,7 @@ RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 ENV PYTHONPATH=/app
-ENV MODEL_DIR=/app/models
+ENV MODEL_DIR=/app/best_openvino_model
 ENV API_PORT=8000
 
 EXPOSE 8000
