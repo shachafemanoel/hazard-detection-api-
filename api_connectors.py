@@ -285,6 +285,55 @@ class RenderConnector:
             logger.error(f"Render API error: {e}")
             return ApiResponse(success=False, error=str(e))
 
+
+class RailwayConnector:
+    """Railway API connector for service discovery"""
+
+    def __init__(self, api_token: str = None):
+        self.api_token = api_token or os.getenv('RAILWAY_TOKEN')
+        self.base_url = "https://backboard.railway.app/graphql/v2"
+        self.headers = {
+            'Authorization': f'Bearer {self.api_token}' if self.api_token else '',
+            'Content-Type': 'application/json'
+        }
+
+    async def get_services(self) -> ApiResponse:
+        """Get services for the authenticated Railway account"""
+        if not self.api_token:
+            return ApiResponse(
+                success=False,
+                error="Railway token not configured",
+            )
+
+        query = """
+        query {
+            projects {
+                edges {
+                    node {
+                        id
+                        name
+                    }
+                }
+            }
+        }
+        """
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.base_url, headers=self.headers, json={'query': query}) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return ApiResponse(success=True, data=data)
+                    else:
+                        error_text = await response.text()
+                        return ApiResponse(
+                            success=False,
+                            error=f"Failed to get services: {error_text}",
+                        )
+        except Exception as e:
+            logger.error(f"Railway API error: {e}")
+            return ApiResponse(success=False, error=str(e))
+
 class ApiManager:
     """Central API manager for all external services"""
     
@@ -293,6 +342,7 @@ class ApiManager:
         self.redis = RedisConnector()
         self.cloudinary = CloudinaryConnector()
         self.render = RenderConnector()
+        self.railway = RailwayConnector()
     
     async def health_check(self) -> dict:
         """Check health of all configured services"""
@@ -359,7 +409,20 @@ class ApiManager:
                 'status': 'disabled',
                 'message': 'API key not configured'
             }
-        
+
+        # Check Railway
+        if self.railway.api_token:
+            railway_result = await self.railway.get_services()
+            health_status['services']['railway'] = {
+                'status': 'healthy' if railway_result.success else 'error',
+                'message': railway_result.error if not railway_result.success else 'OK'
+            }
+        else:
+            health_status['services']['railway'] = {
+                'status': 'disabled',
+                'message': 'Token not configured'
+            }
+
         return health_status
 
 # Global instances
