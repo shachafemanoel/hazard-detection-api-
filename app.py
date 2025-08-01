@@ -434,10 +434,6 @@ async def try_load_pytorch_model(model_dir):
         logger.warning(f"PyTorch model loading failed: {e}")
         return False
 
-@app.get("/")
-async def root():
-    return {"message": "Hazard Detection Backend API", "status": "running"}
-
 # Helper functions for OpenVINO inference
 def preprocess_image(image, input_shape):
     """
