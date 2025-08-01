@@ -48,17 +48,60 @@ import base64
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Define placeholder API connector functions
+class MockApiResponse:
+    def __init__(self, success=False, data=None, error="Service not implemented"):
+        self.success = success
+        self.data = data
+        self.error = error
+
+async def mock_api_manager_health_check():
+    """Mock API manager health check"""
+    return {
+        "status": "disabled",
+        "message": "API connectors not configured",
+        "timestamp": datetime.now().isoformat()
+    }
+
+async def mock_geocode_location(address: str):
+    """Mock geocoding function"""
+    return MockApiResponse(
+        success=False, 
+        error="Geocoding service not configured. Set up Google Maps API or external geocoding service."
+    )
+
+async def mock_cache_detection_result(detection_id: str, detection_data: dict):
+    """Mock cache function"""
+    return MockApiResponse(
+        success=False,
+        error="Caching service not configured. Set up Redis or external caching service."
+    )
+
+async def mock_reverse_geocode_location(lat: float, lng: float):
+    """Mock reverse geocoding function"""
+    return MockApiResponse(
+        success=False,
+        error="Reverse geocoding service not configured. Set up Google Maps API or external geocoding service."
+    )
+
+# Mock API manager class
+class MockApiManager:
+    async def health_check(self):
+        return await mock_api_manager_health_check()
+    
+    def __init__(self):
+        self.render = None
+
 try:
-    from api.api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
+    from api.api_connectors import api_manager, geocode_location, cache_detection_result
 except ImportError:
     try:
-        from api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
+        from api_connectors import api_manager, geocode_location, cache_detection_result
     except ImportError:
-        logger.warning("api_connectors module not found, running in basic mode")
-        api_manager = None
-        geocode_location = None
-        upload_detection_image = None  
-        cache_detection_result = None
+        logger.warning("api_connectors module not found, using mock functions")
+        api_manager = MockApiManager()
+        geocode_location = mock_geocode_location
+        cache_detection_result = mock_cache_detection_result
 
 
 @asynccontextmanager
@@ -209,10 +252,12 @@ async def load_model():
     # If both fail, try fallback locations
     logger.warning("Primary model loading failed, trying fallback locations...")
     fallback_locations = [
-        '/app/models/pytorch',
-        '/app/models/openvino',
-        '/app/best_openvino_model',
-        '/app/public/object_detection_model'
+        '/app',  # Root directory (where best.pt and best_openvino_model/ are located)
+        '/app/models',  # Standard models directory
+        '/app/best_openvino_model',  # Specific OpenVINO directory
+        '/app/models/pytorch',  # PyTorch subdirectory
+        '/app/models/openvino',  # OpenVINO subdirectory
+        '/app/public/object_detection_model'  # Legacy location
     ]
     
     for fallback_dir in fallback_locations:
@@ -249,11 +294,12 @@ async def try_load_openvino_model(model_dir):
         devices = core.available_devices
         logger.info(f"Available devices: {devices}")
         
-        # Look for OpenVINO model files
+        # Look for OpenVINO model files - specific paths for this project
         model_xml_paths = [
-            os.path.join(model_dir, 'best.xml'),
-            os.path.join(model_dir, 'openvino', 'best.xml'),
-            os.path.join(model_dir, 'model.xml')
+            os.path.join(model_dir, 'best_openvino_model', 'best.xml'),  # Primary location
+            os.path.join(model_dir, 'best.xml'),  # Fallback
+            os.path.join(model_dir, 'openvino', 'best.xml'),  # Alternative structure
+            os.path.join(model_dir, 'model.xml')  # Generic fallback
         ]
         
         model_path = None
@@ -305,12 +351,13 @@ async def try_load_pytorch_model(model_dir):
     try:
         logger.info("🔄 Attempting PyTorch model loading...")
         
-        # Look for PyTorch model files
+        # Look for PyTorch model files - specific paths for this project
         model_pt_paths = [
-            os.path.join(model_dir, 'best.pt'),
-            os.path.join(model_dir, 'pytorch', 'best.pt'),
-            os.path.join(model_dir, 'road_damage_detection_last_version.pt'),
-            os.path.join(model_dir, 'best_yolo12m.pt')
+            os.path.join(model_dir, 'best.pt'),  # Primary location
+            os.path.join(model_dir, 'pytorch', 'best.pt'),  # Alternative structure
+            os.path.join(model_dir, 'models', 'best.pt'),  # Another alternative
+            os.path.join(model_dir, 'road_damage_detection_last_version.pt'),  # Legacy name
+            os.path.join(model_dir, 'best_yolo12m.pt')  # Alternative model
         ]
         
         model_path = None
@@ -625,21 +672,42 @@ def create_report(detection, session_id, image_data=None):
 
 @app.get("/health")
 async def health_check():
-    model_status = "loaded" if compiled_model is not None else "not_loaded"
+    # Determine model status based on which backend is loaded
+    if USE_OPENVINO and compiled_model is not None:
+        model_status = "loaded_openvino"
+        model_backend = "openvino"
+    elif not USE_OPENVINO and torch_model is not None:
+        model_status = "loaded_pytorch" 
+        model_backend = "pytorch"
+    else:
+        model_status = "not_loaded"
+        model_backend = "none"
+    
     device_info = None
     
-    if compiled_model is not None:
+    # Get device information based on loaded model
+    if USE_OPENVINO and compiled_model is not None:
         try:
-            # Get device information
             device_info = {
                 "device": DEVICE_NAME,
                 "input_shape": list(input_layer.shape),
                 "output_shape": list(output_layer.shape),
-                "model_path": os.path.join(os.getenv('MODEL_DIR', '/app/best_openvino_model'), "best.xml"),
-                "cache_enabled": CACHE_ENABLED
+                "model_path": "best_openvino_model/best.xml",
+                "cache_enabled": CACHE_ENABLED,
+                "backend": "openvino"
             }
         except Exception as e:
-            logger.warning(f"Could not get model info: {e}")
+            logger.warning(f"Could not get OpenVINO model info: {e}")
+    elif torch_model is not None:
+        try:
+            device_info = {
+                "model_path": "best.pt",
+                "model_type": str(type(torch_model)),
+                "backend": "pytorch",
+                "device": "cpu"  # YOLO typically uses CPU for this setup
+            }
+        except Exception as e:
+            logger.warning(f"Could not get PyTorch model info: {e}")
     
     # Get server environment info for mobile debugging
     import platform
@@ -661,16 +729,22 @@ async def health_check():
             api_health = await api_manager.health_check()
         except Exception as e:
             logger.warning(f"API health check failed: {e}")
+            api_health = {"status": "error", "message": str(e)}
     
     return {
         "status": "healthy",
         "model_status": model_status,
-        "backend_inference": True,
-        "backend_type": "openvino" if USE_OPENVINO else "pytorch",
+        "backend_inference": model_status.startswith("loaded"),
+        "backend_type": model_backend,
         "active_sessions": len(sessions),
         "device_info": device_info,
         "environment": env_info,
         "api_connectors": api_health,
+        "model_files": {
+            "openvino_model": "/app/best_openvino_model/best.xml",
+            "pytorch_model": "/app/best.pt",
+            "current_backend": model_backend
+        },
         "endpoints": {
             "session_start": "/session/start",
             "session_detect": "/detect/{session_id}",
@@ -1100,9 +1174,14 @@ async def geocode_address_endpoint(address: str):
 async def reverse_geocode_endpoint(lat: float, lng: float):
     """Reverse geocode coordinates to address"""
     try:
-        from api_connectors import reverse_geocode_location
-    except Exception:
-        raise HTTPException(status_code=503, detail="Reverse geocoding service unavailable")
+        # Try to import the real function first
+        try:
+            from api_connectors import reverse_geocode_location
+        except ImportError:
+            from api.api_connectors import reverse_geocode_location
+    except ImportError:
+        # Use mock function if not available
+        reverse_geocode_location = mock_reverse_geocode_location
 
     try:
         response = await reverse_geocode_location(lat, lng)
@@ -1161,7 +1240,7 @@ async def render_status():
 # Add main entry point for Render deployment
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     
     # Log startup information
     logger.info(f"Starting FastAPI server on port {port}")
