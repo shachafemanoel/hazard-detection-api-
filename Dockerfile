@@ -36,12 +36,12 @@ RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 ENV PYTHONPATH=/app
-ENV MODEL_DIR=/app/best_openvino_model
-ENV API_PORT=8000
+ENV MODEL_DIR=/app
+ENV API_PORT=8080
 
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:${API_PORT}/health || exit 1
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
