@@ -96,7 +96,7 @@ Expected response:
 builder = "nixpacks"  # Uses Railway's Nixpacks for automatic builds
 
 [deploy]
-startCommand = "python app.py"       # Starts the FastAPI server
+startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"  # Starts the FastAPI server
 healthcheckPath = "/health"          # Railway monitors this endpoint
 healthcheckTimeout = 300             # 5 minutes timeout for health checks
 restartPolicyType = "ON_FAILURE"     # Restart only on failures
