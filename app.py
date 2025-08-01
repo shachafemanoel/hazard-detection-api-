@@ -48,86 +48,6 @@ async def mock_cache_detection_result(detection_id: str, detection_data: dict):
         error="Caching service not configured. Set up Redis or external caching service."
     )
 
-async def mock_reverse_geocode_location(lat: float, lng: float):
-    """Mock reverse geocoding function"""
-    return MockApiResponse(
-        success=False,
-        error="Reverse geocoding service not configured. Set up Google Maps API or external geocoding service."
-    )
-
-# Mock API manager class
-class MockApiManager:
-    async def health_check(self):
-        return await mock_api_manager_health_check()
-    
-    def __init__(self):
-        self.render = None
-
-try:
-<<<<<<< HEAD
-    import openvino as ov
-    import openvino.properties as props
-    logger.info("OpenVINO runtime imported successfully")
-except Exception as e:
-    ov = None
-    props = None
-    logger.warning(f"OpenVINO not available: {e}")
-
-# Log availability of OpenVINO runtime early so it appears in Railway logs
-if ov is not None:
-    logger.info("OpenVINO runtime available")
-else:
-    logger.info("OpenVINO runtime not available")
-
-try:
-    from ultralytics import YOLO
-    import torch
-    logger.info("Ultralytics and PyTorch imported successfully")
-except Exception as e:
-    YOLO = None
-    torch = None
-    logger.warning(f"Ultralytics/PyTorch not available: {e}")
-
-# Log availability of the YOLO runtime
-if YOLO is not None:
-    logger.info("YOLO runtime available")
-else:
-    logger.info("YOLO runtime not available")
-
-try:
-    from cpuinfo import get_cpu_info
-except Exception:
-    get_cpu_info = None
-
-# Define placeholder API connector functions
-class MockApiResponse:
-    def __init__(self, success=False, data=None, error="Service not implemented"):
-        self.success = success
-        self.data = data
-        self.error = error
-
-async def mock_api_manager_health_check():
-    """Mock API manager health check"""
-    return {
-        "status": "disabled",
-        "message": "API connectors not configured",
-        "timestamp": datetime.now().isoformat()
-    }
-
-async def mock_geocode_location(address: str):
-    """Mock geocoding function"""
-    return MockApiResponse(
-        success=False, 
-        error="Geocoding service not configured. Set up Google Maps API or external geocoding service."
-    )
-
-async def mock_cache_detection_result(detection_id: str, detection_data: dict):
-    """Mock cache function"""
-    return MockApiResponse(
-        success=False,
-        error="Caching service not configured. Set up Redis or external caching service."
-    )
-
 async def mock_upload_detection_image(image_data: str):
     """Mock image upload function"""
     return MockApiResponse(
@@ -151,10 +71,30 @@ class MockApiManager:
         self.render = None
 
 try:
+    import openvino as ov
+    import openvino.properties as props
+    logger.info("OpenVINO runtime imported successfully")
+except Exception as e:
+    ov = None
+    props = None
+    logger.warning(f"OpenVINO not available: {e}")
+
+try:
+    from ultralytics import YOLO
+    import torch
+    logger.info("Ultralytics and PyTorch imported successfully")
+except Exception as e:
+    YOLO = None
+    torch = None
+    logger.warning(f"Ultralytics/PyTorch not available: {e}")
+
+try:
+    from cpuinfo import get_cpu_info
+except Exception:
+    get_cpu_info = None
+
+try:
     from api.api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
-=======
-    from api.api_connectors import api_manager, geocode_location, cache_detection_result
->>>>>>> clean-build
 except ImportError:
     try:
         from api_connectors import api_manager, geocode_location, cache_detection_result
@@ -162,10 +102,7 @@ except ImportError:
         logger.warning("api_connectors module not found, using mock functions")
         api_manager = MockApiManager()
         geocode_location = mock_geocode_location
-<<<<<<< HEAD
         upload_detection_image = mock_upload_detection_image
-=======
->>>>>>> clean-build
         cache_detection_result = mock_cache_detection_result
 
 
@@ -361,7 +298,6 @@ async def try_load_openvino_model(model_dir):
         devices = core.available_devices
         logger.info(f"Available OpenVINO devices: {devices}")
         
-<<<<<<< HEAD
         # Show device information
         for device in devices:
             try:
@@ -370,10 +306,7 @@ async def try_load_openvino_model(model_dir):
             except Exception:
                 logger.info(f"{device}: (device info unavailable)")
         
-        # Look for OpenVINO model files (.xml and .bin)
-=======
         # Look for OpenVINO model files - specific paths for this project
->>>>>>> clean-build
         model_xml_paths = [
             os.path.join(model_dir, 'best_openvino_model', 'best.xml'),  # Primary location
             os.path.join(model_dir, 'best.xml'),  # Fallback
