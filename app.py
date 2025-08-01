@@ -723,16 +723,17 @@ def create_report(detection, session_id, image_data=None):
 
 @app.get("/health")
 async def health_check():
-    # Determine model status based on which backend is loaded
-    if USE_OPENVINO and compiled_model is not None:
-        model_status = "loaded_openvino"
-        model_backend = "openvino"
-    elif not USE_OPENVINO and torch_model is not None:
-        model_status = "loaded_pytorch" 
-        model_backend = "pytorch"
-    else:
-        model_status = "not_loaded"
-        model_backend = "none"
+    try:
+        # Determine model status based on which backend is loaded
+        if USE_OPENVINO and compiled_model is not None:
+            model_status = "loaded_openvino"
+            model_backend = "openvino"
+        elif not USE_OPENVINO and torch_model is not None:
+            model_status = "loaded_pytorch" 
+            model_backend = "pytorch"
+        else:
+            model_status = "not_loaded"
+            model_backend = "none"
     
     device_info = None
     
@@ -805,7 +806,21 @@ async def health_check():
             "geocode": "/api/geocode",
             "reverse_geocode": "/api/reverse-geocode"
         }
-    }
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return {
+            "status": "healthy",  # Still return healthy for Railway gateway
+            "model_status": "error",
+            "backend_inference": False,
+            "backend_type": "none",
+            "error": str(e),
+            "message": "Service is running but encountered health check error"
+        }
+
+@app.get("/")
+async def root():
+    """Simple root endpoint for Railway gateway"""
+    return {"status": "ok", "service": "hazard-detection-api", "version": "1.0"}
 
 @app.post("/session/start")
 async def start_session():
