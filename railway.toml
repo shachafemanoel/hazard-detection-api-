@@ -2,16 +2,16 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python app.py"
+startCommand = "uvicorn app:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [variables]
-MODEL_DIR = "."
+MODEL_DIR = "/app"
 MODEL_BACKEND = "auto"
-PYTHONPATH = "."
+PYTHONPATH = "/app"
 
 [environments.production.variables]
 RAILWAY_ENVIRONMENT_NAME = "production"
