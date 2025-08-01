@@ -3,37 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from PIL import Image
 from io import BytesIO
-
-try:
-    import openvino as ov
-    import openvino.properties as props
-except Exception:
-    ov = None
-    props = None
-
-# Log availability of OpenVINO runtime early so it appears in Railway logs
-if ov is not None:
-    logging.info("OpenVINO runtime available")
-else:
-    logging.info("OpenVINO runtime not available")
-
-try:
-    from ultralytics import YOLO
-    import torch
-except Exception:
-    YOLO = None
-    torch = None
-
-# Log availability of the YOLO runtime
-if YOLO is not None:
-    logging.info("YOLO runtime available")
-else:
-    logging.info("YOLO runtime not available")
-
-try:
-    from cpuinfo import get_cpu_info
-except Exception:
-    get_cpu_info = None
 import numpy as np
 import cv2
 import time
@@ -44,9 +13,97 @@ from typing import Dict, List, Optional
 import math
 from collections import defaultdict
 import base64
+from pathlib import Path
+
 # Set up logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+try:
+    import openvino as ov
+    import openvino.properties as props
+    logger.info("OpenVINO runtime imported successfully")
+except Exception as e:
+    ov = None
+    props = None
+    logger.warning(f"OpenVINO not available: {e}")
+
+# Log availability of OpenVINO runtime early so it appears in Railway logs
+if ov is not None:
+    logger.info("OpenVINO runtime available")
+else:
+    logger.info("OpenVINO runtime not available")
+
+try:
+    from ultralytics import YOLO
+    import torch
+    logger.info("Ultralytics and PyTorch imported successfully")
+except Exception as e:
+    YOLO = None
+    torch = None
+    logger.warning(f"Ultralytics/PyTorch not available: {e}")
+
+# Log availability of the YOLO runtime
+if YOLO is not None:
+    logger.info("YOLO runtime available")
+else:
+    logger.info("YOLO runtime not available")
+
+try:
+    from cpuinfo import get_cpu_info
+except Exception:
+    get_cpu_info = None
+
+# Define placeholder API connector functions
+class MockApiResponse:
+    def __init__(self, success=False, data=None, error="Service not implemented"):
+        self.success = success
+        self.data = data
+        self.error = error
+
+async def mock_api_manager_health_check():
+    """Mock API manager health check"""
+    return {
+        "status": "disabled",
+        "message": "API connectors not configured",
+        "timestamp": datetime.now().isoformat()
+    }
+
+async def mock_geocode_location(address: str):
+    """Mock geocoding function"""
+    return MockApiResponse(
+        success=False, 
+        error="Geocoding service not configured. Set up Google Maps API or external geocoding service."
+    )
+
+async def mock_cache_detection_result(detection_id: str, detection_data: dict):
+    """Mock cache function"""
+    return MockApiResponse(
+        success=False,
+        error="Caching service not configured. Set up Redis or external caching service."
+    )
+
+async def mock_upload_detection_image(image_data: str):
+    """Mock image upload function"""
+    return MockApiResponse(
+        success=False,
+        error="Image upload service not configured. Set up Cloudinary or external storage service."
+    )
+
+async def mock_reverse_geocode_location(lat: float, lng: float):
+    """Mock reverse geocoding function"""
+    return MockApiResponse(
+        success=False,
+        error="Reverse geocoding service not configured. Set up Google Maps API or external geocoding service."
+    )
+
+# Mock API manager class
+class MockApiManager:
+    async def health_check(self):
+        return await mock_api_manager_health_check()
+    
+    def __init__(self):
+        self.render = None
 
 try:
     from api.api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
@@ -54,11 +111,11 @@ except ImportError:
     try:
         from api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
     except ImportError:
-        logger.warning("api_connectors module not found, running in basic mode")
-        api_manager = None
-        geocode_location = None
-        upload_detection_image = None  
-        cache_detection_result = None
+        logger.warning("api_connectors module not found, using mock functions")
+        api_manager = MockApiManager()
+        geocode_location = mock_geocode_location
+        upload_detection_image = mock_upload_detection_image
+        cache_detection_result = mock_cache_detection_result
 
 
 @asynccontextmanager
@@ -229,7 +286,7 @@ async def load_model():
 
 
 async def try_load_openvino_model(model_dir):
-    """Try to load OpenVINO model from specified directory"""
+    """Try to load OpenVINO model from specified directory using best practices"""
     global core, compiled_model, input_layer, output_layer, USE_OPENVINO
     
     if ov is None:
@@ -245,11 +302,21 @@ async def try_load_openvino_model(model_dir):
                 return False
         
         logger.info("🔄 Attempting OpenVINO model loading...")
+        
+        # Initialize OpenVINO Core
         core = ov.Core()
         devices = core.available_devices
-        logger.info(f"Available devices: {devices}")
+        logger.info(f"Available OpenVINO devices: {devices}")
         
-        # Look for OpenVINO model files
+        # Show device information
+        for device in devices:
+            try:
+                device_name = core.get_property(device, props.device.full_name)
+                logger.info(f"{device}: {device_name}")
+            except Exception:
+                logger.info(f"{device}: (device info unavailable)")
+        
+        # Look for OpenVINO model files (.xml and .bin)
         model_xml_paths = [
             os.path.join(model_dir, 'best.xml'),
             os.path.join(model_dir, 'openvino', 'best.xml'),
@@ -264,33 +331,64 @@ async def try_load_openvino_model(model_dir):
                 break
         
         if not model_path:
-            logger.info("No OpenVINO model files found")
+            logger.info("No OpenVINO model files (.xml) found")
+            return False
+        
+        # Verify .bin file exists
+        bin_path = Path(model_path).with_suffix('.bin')
+        if not bin_path.exists():
+            logger.warning(f"Missing .bin file: {bin_path}")
             return False
             
-        # Load and compile model
+        # Read the model using OpenVINO Core
+        logger.info("📖 Reading OpenVINO model...")
         model = core.read_model(model=model_path)
-        if model.input().partial_shape.is_dynamic:
+        
+        # Get model input/output info
+        input_info = model.inputs[0]
+        output_info = model.outputs[0]
+        logger.info(f"📊 Original input shape: {input_info.shape}")
+        logger.info(f"📊 Original output shape: {output_info.shape}")
+        
+        # Reshape model if needed (ensure static shape for YOLO)
+        if input_info.partial_shape.is_dynamic:
+            logger.info("🔧 Reshaping dynamic model to static shape...")
             new_shape = ov.PartialShape([1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE])
-            model.reshape({model.input().any_name: new_shape})
+            model.reshape({input_info.any_name: new_shape})
+            logger.info(f"📊 Reshaped input to: {new_shape}")
 
+        # Configure compilation with caching
         config = {}
         if CACHE_ENABLED:
             cache_dir = os.path.join(os.path.dirname(model_path), 'cache')
             os.makedirs(cache_dir, exist_ok=True)
-            config['CACHE_DIR'] = cache_dir
+            config['CACHE_DIR'] = str(cache_dir)
+            logger.info(f"💾 Model caching enabled: {cache_dir}")
 
+        # Compile the model for the target device
+        logger.info(f"⚙️ Compiling model for {DEVICE_NAME} device...")
         compiled_model = core.compile_model(model=model, device_name=DEVICE_NAME, config=config)
+        
+        # Get compiled model input/output layers
         input_layer = compiled_model.input(0)
         output_layer = compiled_model.output(0)
-        USE_OPENVINO = True
         
-        logger.info("✅ OpenVINO model loaded successfully")
-        logger.info(f"📊 Input shape: {input_layer.shape}")
-        logger.info(f"📊 Output shape: {output_layer.shape}")
+        # Log model details
+        logger.info("✅ OpenVINO model compiled successfully")
+        logger.info(f"📊 Compiled input shape: {input_layer.shape}")
+        logger.info(f"📊 Compiled output shape: {output_layer.shape}")
+        logger.info(f"🎯 Input precision: {input_layer.element_type}")
+        logger.info(f"🎯 Output precision: {output_layer.element_type}")
+        logger.info(f"🏷️ Input name: {input_layer.any_name}")
+        logger.info(f"🏷️ Output name: {output_layer.any_name}")
+        
+        USE_OPENVINO = True
         return True
         
     except Exception as e:
-        logger.warning(f"OpenVINO model loading failed: {e}")
+        logger.error(f"OpenVINO model loading failed: {e}")
+        import traceback
+        logger.error(f"Full error trace: {traceback.format_exc()}")
         return False
 
 
@@ -661,6 +759,7 @@ async def health_check():
             api_health = await api_manager.health_check()
         except Exception as e:
             logger.warning(f"API health check failed: {e}")
+            api_health = {"status": "error", "message": str(e)}
     
     return {
         "status": "healthy",
@@ -787,11 +886,12 @@ async def detect_hazards(session_id: str, file: UploadFile = File(...)):
         if USE_OPENVINO:
             input_shape = input_layer.shape
             processed_image, scale, paste_x, paste_y = preprocess_image(image, input_shape)
-            infer_request = compiled_model.create_infer_request()
-            infer_request.infer(inputs={input_layer.any_name: processed_image})
-            predictions = infer_request.get_output_tensor(output_layer.index).data
+            
+            # Use OpenVINO best practices from tutorial - direct inference method
+            result = compiled_model({input_layer.any_name: processed_image})[output_layer]
+            
             raw_detections = postprocess_predictions_letterbox(
-                predictions,
+                result,
                 image.width,
                 image.height,
                 input_shape[3],
@@ -926,11 +1026,12 @@ async def detect_batch(files: list[UploadFile] = File(...)):
             if USE_OPENVINO:
                 input_shape = input_layer.shape
                 processed_image, scale, paste_x, paste_y = preprocess_image(image, input_shape)
-                infer_request = compiled_model.create_infer_request()
-                infer_request.infer(inputs={input_layer.any_name: processed_image})
-                predictions = infer_request.get_output_tensor(output_layer.index).data
+                
+                # Use OpenVINO best practices - direct inference
+                result = compiled_model({input_layer.any_name: processed_image})[output_layer]
+                
                 detections = postprocess_predictions_letterbox(
-                    predictions,
+                    result,
                     image.width,
                     image.height,
                     input_shape[3],
@@ -1005,11 +1106,12 @@ async def detect_hazards_legacy(file: UploadFile = File(...)):
         if USE_OPENVINO:
             input_shape = input_layer.shape
             processed_image, scale, paste_x, paste_y = preprocess_image(image, input_shape)
-            infer_request = compiled_model.create_infer_request()
-            infer_request.infer(inputs={input_layer.any_name: processed_image})
-            predictions = infer_request.get_output_tensor(output_layer.index).data
+            
+            # Use OpenVINO best practices - direct inference
+            result = compiled_model({input_layer.any_name: processed_image})[output_layer]
+            
             raw_detections = postprocess_predictions_letterbox(
-                predictions,
+                result,
                 image.width,
                 image.height,
                 input_shape[3],
@@ -1100,9 +1202,14 @@ async def geocode_address_endpoint(address: str):
 async def reverse_geocode_endpoint(lat: float, lng: float):
     """Reverse geocode coordinates to address"""
     try:
-        from api_connectors import reverse_geocode_location
-    except Exception:
-        raise HTTPException(status_code=503, detail="Reverse geocoding service unavailable")
+        # Try to import the real function first
+        try:
+            from api_connectors import reverse_geocode_location
+        except ImportError:
+            from api.api_connectors import reverse_geocode_location
+    except ImportError:
+        # Use mock function if not available
+        reverse_geocode_location = mock_reverse_geocode_location
 
     try:
         response = await reverse_geocode_location(lat, lng)

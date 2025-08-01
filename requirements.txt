@@ -1,12 +1,26 @@
+# Core FastAPI and server dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
+pydantic==2.5.0
+python-dotenv==1.0.0
+
+# Image processing and computer vision
 Pillow==10.1.0
 numpy==1.24.3
 opencv-python-headless==4.8.1.78
+
+# YOLOv11 and PyTorch (updated for C3k2 module support)
 ultralytics==8.3.0
 torch==2.1.0
 torchvision==0.16.0
+
+# OpenVINO for optimized inference
+openvino>=2023.1.0
+
+# System and performance monitoring
 py-cpuinfo==9.0.0
-python-dotenv==1.0.0
-pydantic==2.5.0
+
+# Additional dependencies for complete functionality
+requests>=2.31.0
+tqdm>=4.64.0
