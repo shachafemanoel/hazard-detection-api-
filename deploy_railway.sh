@@ -87,7 +87,7 @@ echo ""
 echo "🌐 Deploying to Railway..."
 
 # Deploy to Railway
-railway deploy
+railway up
 
 echo ""
 echo "⏳ Waiting for deployment to complete..."
