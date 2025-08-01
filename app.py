@@ -9,7 +9,7 @@ import time
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import math
 from collections import defaultdict
 import base64
@@ -70,45 +70,57 @@ class MockApiManager:
     def __init__(self):
         self.render = None
 
+# Safe imports with fallbacks
+ov = None
+props = None
+YOLO = None
+torch = None
+get_cpu_info = None
+
+# Initialize basic service first, then try optional dependencies
+logger.info("🚀 Initializing FastAPI service...")
+
 try:
     import openvino as ov
     import openvino.properties as props
-    logger.info("OpenVINO runtime imported successfully")
+    logger.info("✅ OpenVINO runtime available")
 except Exception as e:
-    ov = None
-    props = None
-    logger.warning(f"OpenVINO not available: {e}")
+    logger.info(f"⚠️ OpenVINO not available: {e}")
 
 try:
     from ultralytics import YOLO
     import torch
-    logger.info("Ultralytics and PyTorch imported successfully")
+    logger.info("✅ Ultralytics and PyTorch available")
 except Exception as e:
-    YOLO = None
-    torch = None
-    logger.warning(f"Ultralytics/PyTorch not available: {e}")
+    logger.info(f"⚠️ Ultralytics/PyTorch not available: {e}")
 
 try:
     from cpuinfo import get_cpu_info
-except Exception:
-    get_cpu_info = None
+    logger.info("✅ CPU info available")
+except Exception as e:
+    logger.info(f"⚠️ CPU info not available: {e}")
 
+# Use mock functions by default to prevent import failures
+api_manager = MockApiManager()
+geocode_location = mock_geocode_location
+upload_detection_image = mock_upload_detection_image
+cache_detection_result = mock_cache_detection_result
+
+# Try to import real API connectors but don't fail if missing
 try:
-    from api.api_connectors import api_manager, geocode_location, upload_detection_image, cache_detection_result
+    from api.api_connectors import api_manager as real_api_manager, geocode_location as real_geocode
+    api_manager = real_api_manager
+    geocode_location = real_geocode
+    logger.info("Real API connectors loaded successfully")
 except ImportError:
-    try:
-        from api_connectors import api_manager, geocode_location, cache_detection_result
-    except ImportError:
-        logger.warning("api_connectors module not found, using mock functions")
-        api_manager = MockApiManager()
-        geocode_location = mock_geocode_location
-        upload_detection_image = mock_upload_detection_image
-        cache_detection_result = mock_cache_detection_result
+    logger.info("Using mock API connectors (api_connectors module not found)")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await load_model()
+    # Start model loading in background to prevent startup timeout
+    import asyncio
+    asyncio.create_task(load_model_async())
     yield
 
 
@@ -209,6 +221,16 @@ active_detections = defaultdict(list)  # session_id -> list of detections
 TRACKING_DISTANCE_THRESHOLD = 50  # pixels
 TRACKING_TIME_THRESHOLD = 2.0  # seconds
 MIN_CONFIDENCE_FOR_REPORT = 0.6
+
+# Background model loading to prevent startup timeout
+async def load_model_async():
+    """Load model asynchronously in background"""
+    try:
+        logger.info("🔄 Starting background model loading...")
+        await load_model()
+        logger.info("✅ Background model loading completed")
+    except Exception as e:
+        logger.error(f"❌ Background model loading failed: {e}")
 
 # Enhanced model loading with intelligent backend selection
 async def load_model():
@@ -820,7 +842,13 @@ async def health_check():
 @app.get("/")
 async def root():
     """Simple root endpoint for Railway gateway"""
-    return {"status": "ok", "service": "hazard-detection-api", "version": "1.0"}
+    return {
+        "status": "ok", 
+        "service": "hazard-detection-api", 
+        "version": "1.0",
+        "message": "FastAPI service is running",
+        "endpoints": ["/health", "/session/start", "/detect"]
+    }
 
 @app.post("/session/start")
 async def start_session():
