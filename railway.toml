@@ -9,28 +9,15 @@ healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
-[variables]
-SESSION_SECRET = "aVeryStrongAndRandomSecretKeyForYourSessionManagement123!@"
-SENDGRID_API_KEY = "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"
-CLOUDINARY_API_KEY = "688173149321172"
-CLOUDINARY_API_SECRET = "Mb_3IFGPoWA1_AM-XzOd6AH_Pyg"
-CLOUDINARY_CLOUD_NAME = "dgn5da9f8"
-GOOGLE_CLIENT_ID = "46375555882-rmivba20noas9slfskb3cfvugssladrr.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
-GOOGLE_GEOCODING_API_KEY = "AIzaSyAJ4073PjQ5koFcU9O3WCt8IsK43NNMPcc"
-GOOGLE_MAPS_API_KEY = "AIzaSyAJ4073PjQ5koFcU9O3WCt8IsK43NNMPcc"
-REDIS_HOST = "redis-13437.c44.us-east-1-2.ec2.redns.redis-cloud.com"
-REDIS_PORT = "13437"
-REDIS_USERNAME = "default"
-REDIS_PASSWORD = "e7uFJGU10TYEVhTJFoOkyPog0fBMhJMG"
+# Environment variables are set directly in Railway dashboard for security
 
 [services.hazard-detection.environments.production]
-API_URL = "https://hazard-api-production-production.up.railway.app:8000"
+API_URL = "https://hazard-api-production-production.up.railway.app"
 GOOGLE_CALLBACK_URL = "https://hazard-detection-production-8735.up.railway.app/auth/google/callback"
 
 [services.hazard-detection-api.environments.production]
 MODEL_DIR = "/app"
 MODEL_BACKEND = "auto"
 PYTHONPATH = "/app"
-PORT = "8000"
-API_PORT = "8000"
+PORT = "8080"
+API_PORT = "8080"
