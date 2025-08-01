@@ -64,6 +64,9 @@ CLOUDINARY_API_SECRET=your_cloudinary_secret
 
 # Custom domain (if using)
 FRONTEND_URL=https://your-frontend-domain.com
+
+# Railway API (for service discovery)
+RAILWAY_TOKEN=your_railway_token
 ```
 
 ### 4. Verify Deployment

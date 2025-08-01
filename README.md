@@ -57,8 +57,9 @@ A high-performance FastAPI-based object detection service for identifying road h
    export REDIS_URL="redis://localhost:6379"
    export CLOUDINARY_CLOUD_NAME="your_cloud_name"
    export CLOUDINARY_API_KEY="your_api_key"
-   export CLOUDINARY_API_SECRET="your_api_secret"
-   export RENDER_API_KEY="your_render_key"
+    export CLOUDINARY_API_SECRET="your_api_secret"
+    export RENDER_API_KEY="your_render_key"
+    export RAILWAY_TOKEN="your_railway_token"
    
    # Model configuration
    export MODEL_BACKEND="auto"  # auto, openvino, pytorch
