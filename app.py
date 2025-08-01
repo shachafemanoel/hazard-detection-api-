@@ -338,15 +338,23 @@ async def try_load_openvino_model(model_dir):
         # Get model input/output info
         input_info = model.inputs[0]
         output_info = model.outputs[0]
-        logger.info(f"📊 Original input shape: {input_info.shape}")
-        logger.info(f"📊 Original output shape: {output_info.shape}")
         
-        # Reshape model if needed (ensure static shape for YOLO)
+        # Handle dynamic shapes safely
         if input_info.partial_shape.is_dynamic:
+            logger.info(f"📊 Original input shape: {input_info.partial_shape} (dynamic)")
             logger.info("🔧 Reshaping dynamic model to static shape...")
             new_shape = ov.PartialShape([1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE])
             model.reshape({input_info.any_name: new_shape})
             logger.info(f"📊 Reshaped input to: {new_shape}")
+            # Update input_info after reshape
+            input_info = model.inputs[0]
+        else:
+            logger.info(f"📊 Original input shape: {input_info.shape}")
+        
+        if output_info.partial_shape.is_dynamic:
+            logger.info(f"📊 Original output shape: {output_info.partial_shape} (dynamic)")
+        else:
+            logger.info(f"📊 Original output shape: {output_info.shape}")
 
         # Configure compilation with caching
         config = {}

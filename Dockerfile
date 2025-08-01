@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --prefix=/install \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     --force-reinstall \
-    ultralytics==8.3.0 && \
+    ultralytics>=8.3.4 && \
     pip install --no-cache-dir --prefix=/install \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     --force-reinstall \
