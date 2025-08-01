@@ -42,12 +42,12 @@ Set these in Railway Dashboard → Your Project → Variables:
 
 #### Required Variables
 ```bash
-PORT=8000
 RAILWAY_ENVIRONMENT_NAME=production
 MODEL_DIR=/app
 MODEL_BACKEND=auto
 PYTHONPATH=/app
 ```
+Railway automatically provides the `PORT` environment variable, so you don't need to set it manually.
 
 #### Optional API Service Variables
 ```bash
@@ -106,7 +106,6 @@ restartPolicyMaxRetries = 3          # Maximum restart attempts
 MODEL_DIR = "/app"                   # Model files location
 MODEL_BACKEND = "auto"               # Auto-select best backend
 PYTHONPATH = "/app"                  # Python path configuration
-PORT = "8000"                        # Service port
 RAILWAY_ENVIRONMENT_NAME = "production"  # Environment identifier
 ```
 
