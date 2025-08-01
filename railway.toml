@@ -12,5 +12,4 @@ restartPolicyMaxRetries = 3
 MODEL_DIR = "/app"
 MODEL_BACKEND = "auto"
 PYTHONPATH = "/app"
-PORT = "8000"
 RAILWAY_ENVIRONMENT_NAME = "production"
