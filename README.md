@@ -384,11 +384,11 @@ The test suite checks:
 
 3. **Set Environment Variables** (in Railway dashboard)
    ```bash
-   PORT=8000
    MODEL_BACKEND=auto
    MODEL_DIR=/app
    RAILWAY_ENVIRONMENT_NAME=production
    ```
+   Railway automatically sets the `PORT` value for you.
 
 4. **Your API will be available at:**
    ```
