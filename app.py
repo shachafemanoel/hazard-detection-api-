@@ -734,77 +734,78 @@ async def health_check():
         else:
             model_status = "not_loaded"
             model_backend = "none"
-    
-    device_info = None
-    
-    # Get device information based on loaded model
-    if USE_OPENVINO and compiled_model is not None:
-        try:
-            device_info = {
-                "device": DEVICE_NAME,
-                "input_shape": list(input_layer.shape),
-                "output_shape": list(output_layer.shape),
-                "model_path": "best_openvino_model/best.xml",
-                "cache_enabled": CACHE_ENABLED,
-                "backend": "openvino"
+        
+        device_info = None
+        
+        # Get device information based on loaded model
+        if USE_OPENVINO and compiled_model is not None:
+            try:
+                device_info = {
+                    "device": DEVICE_NAME,
+                    "input_shape": list(input_layer.shape),
+                    "output_shape": list(output_layer.shape),
+                    "model_path": "best_openvino_model/best.xml",
+                    "cache_enabled": CACHE_ENABLED,
+                    "backend": "openvino"
+                }
+            except Exception as e:
+                logger.warning(f"Could not get OpenVINO model info: {e}")
+        elif torch_model is not None:
+            try:
+                device_info = {
+                    "model_path": "best.pt",
+                    "model_type": str(type(torch_model)),
+                    "backend": "pytorch",
+                    "device": "cpu"  # YOLO typically uses CPU for this setup
+                }
+            except Exception as e:
+                logger.warning(f"Could not get PyTorch model info: {e}")
+        
+        # Get server environment info for mobile debugging
+        import platform
+        
+        env_info = {
+            "platform": platform.system(),
+            "python_version": platform.python_version(),
+            "hostname": platform.node(),
+            "deployment_env": os.getenv("RENDER", "local") or os.getenv("DEPLOYMENT_ENV", "unknown"),
+            "port": os.getenv("PORT", "8000"),
+            "cors_enabled": True,
+            "mobile_friendly": True
+        }
+        
+        # Check external API connectivity if available
+        api_health = None
+        if api_manager is not None:
+            try:
+                api_health = await api_manager.health_check()
+            except Exception as e:
+                logger.warning(f"API health check failed: {e}")
+                api_health = {"status": "error", "message": str(e)}
+        
+        return {
+            "status": "healthy",
+            "model_status": model_status,
+            "backend_inference": model_status.startswith("loaded"),
+            "backend_type": model_backend,
+            "active_sessions": len(sessions),
+            "device_info": device_info,
+            "environment": env_info,
+            "api_connectors": api_health,
+            "model_files": {
+                "openvino_model": "/app/best_openvino_model/best.xml",
+                "pytorch_model": "/app/best.pt",
+                "current_backend": model_backend
+            },
+            "endpoints": {
+                "session_start": "/session/start",
+                "session_detect": "/detect/{session_id}",
+                "legacy_detect": "/detect",
+                "batch_detect": "/detect-batch",
+                "api_health": "/api/health",
+                "geocode": "/api/geocode",
+                "reverse_geocode": "/api/reverse-geocode"
             }
-        except Exception as e:
-            logger.warning(f"Could not get OpenVINO model info: {e}")
-    elif torch_model is not None:
-        try:
-            device_info = {
-                "model_path": "best.pt",
-                "model_type": str(type(torch_model)),
-                "backend": "pytorch",
-                "device": "cpu"  # YOLO typically uses CPU for this setup
-            }
-        except Exception as e:
-            logger.warning(f"Could not get PyTorch model info: {e}")
-    
-    # Get server environment info for mobile debugging
-    import platform
-    
-    env_info = {
-        "platform": platform.system(),
-        "python_version": platform.python_version(),
-        "hostname": platform.node(),
-        "deployment_env": os.getenv("RENDER", "local") or os.getenv("DEPLOYMENT_ENV", "unknown"),
-        "port": os.getenv("PORT", "8000"),
-        "cors_enabled": True,
-        "mobile_friendly": True
-    }
-    
-    # Check external API connectivity if available
-    api_health = None
-    if api_manager is not None:
-        try:
-            api_health = await api_manager.health_check()
-        except Exception as e:
-            logger.warning(f"API health check failed: {e}")
-            api_health = {"status": "error", "message": str(e)}
-    
-    return {
-        "status": "healthy",
-        "model_status": model_status,
-        "backend_inference": model_status.startswith("loaded"),
-        "backend_type": model_backend,
-        "active_sessions": len(sessions),
-        "device_info": device_info,
-        "environment": env_info,
-        "api_connectors": api_health,
-        "model_files": {
-            "openvino_model": "/app/best_openvino_model/best.xml",
-            "pytorch_model": "/app/best.pt",
-            "current_backend": model_backend
-        },
-        "endpoints": {
-            "session_start": "/session/start",
-            "session_detect": "/detect/{session_id}",
-            "legacy_detect": "/detect",
-            "batch_detect": "/detect-batch",
-            "api_health": "/api/health",
-            "geocode": "/api/geocode",
-            "reverse_geocode": "/api/reverse-geocode"
         }
     except Exception as e:
         logger.error(f"Health check error: {e}")
