@@ -416,18 +416,17 @@ python integration_example.py
 
 ### Docker
 
-```dockerfile
-FROM python:3.9-slim
+Use the provided multi-stage `Dockerfile` to containerize the API:
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+```bash
+# Build the image
+docker build -t hazard-detection-api .
 
-COPY . .
-
-EXPOSE 8000
-CMD ["python", "app.py"]
+# Run the container
+docker run -p 8080:8080 hazard-detection-api
 ```
+
+The image uses Python 3.11 and exposes port `8080` via the `PORT` environment variable.
 
 ## ⚙️ Configuration
 

@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Union
 import math
 from collections import defaultdict
 import base64
+import os
 from pathlib import Path
 
 # Set up logging first
@@ -125,9 +126,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Hazard Detection Backend", version="1.0.0", lifespan=lifespan)
-
 # Enhanced CORS configuration for Render deployment
-import os
 from urllib.parse import urlparse
 
 
@@ -425,7 +424,13 @@ async def try_load_openvino_model(model_dir):
         logger.info(f"🎯 Input precision: {input_layer.element_type}")
         logger.info(f"🎯 Output precision: {output_layer.element_type}")
         logger.info(f"🏷️ Input name: {input_layer.any_name}")
-        logger.info(f"🏷️ Output name: {output_layer.any_name}")
+
+        # Safely retrieve and log output tensor name
+        output_names = output_layer.get_tensor().get_names()
+        if output_names:
+            logger.info(f"🏷️ Output name: {next(iter(output_names))}")
+        else:
+            logger.info("🏷️ Output name: (unnamed)")
         
         USE_OPENVINO = True
         return True
@@ -471,15 +476,14 @@ async def try_load_pytorch_model(model_dir):
         # Load PyTorch model with error catching for ONNX issues
         try:
             # Disable ONNX export capabilities that cause issues
-            import os
             os.environ['YOLO_VERBOSE'] = 'False'
-            
+
             torch_model = YOLO(model_path)
             USE_OPENVINO = False
-            
+
             # Test basic inference capability without ONNX export
             logger.info("🧪 Testing PyTorch model functionality...")
-            
+
             logger.info("✅ PyTorch model loaded successfully")
             logger.info(f"📊 Model type: {type(torch_model)}")
             return True
