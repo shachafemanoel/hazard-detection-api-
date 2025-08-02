@@ -5,15 +5,17 @@ This comprehensive guide shows you how to interact with the Hazard Detection API
 ## 🌍 Base URLs
 
 ```javascript
-// Production (Railway)
-const API_BASE_URL = "https://hazard-api-production-production.up.railway.app/";
+// Production (Railway) - default
+const API_BASE_URL = process.env.HAZARD_API_URL || "https://hazard-api-production-production.up.railway.app:8000";
 
 // Local Development
-const API_BASE_URL = "http://localhost:8080";
+// const API_BASE_URL = "http://localhost:8080";
 
 // Internal Railway Service (if calling from another Railway service)
 const INTERNAL_API_URL = `http://${process.env.RAILWAY_SERVICE_NAME || 'hazard-detection-api'}:8080`;
 ```
+
+You can override the base URL by setting the `HAZARD_API_URL` environment variable.
 
 ## 📋 Available Endpoints
 
@@ -36,7 +38,7 @@ const checkHealth = async () => {
 
 ```bash
 # cURL Example
-curl -X GET "https://hazard-api-production-production.up.railway.app//health"
+curl -X GET "https://hazard-api-production-production.up.railway.app:8000/health"
 ```
 
 **Response:**
@@ -79,7 +81,7 @@ const startSession = async () => {
 ```
 
 ```bash
-curl -X POST "https://hazard-api-production-production.up.railway.app/session/start" \
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/session/start" \
   -H "Content-Type: application/json"
 ```
 
@@ -128,7 +130,7 @@ const detectHazards = async (sessionId, imageFile) => {
 ```
 
 ```bash
-curl -X POST "https://hazard-api-production-production.up.railway.app/" \
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/" \
   -F "file=@road_image.jpg"
 ```
 
@@ -309,7 +311,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 
 class HazardDetectionClient {
-  constructor(baseUrl = process.env.API_URL || 'http://localhost:8080') {
+  constructor(baseUrl = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app:8000') {
     this.baseUrl = baseUrl;
     this.sessionId = null;
   }
@@ -430,6 +432,7 @@ module.exports = { HazardDetectionClient, processImages };
 ### Python Client
 
 ```python
+import os
 import requests
 import asyncio
 import aiohttp
@@ -437,7 +440,7 @@ from typing import List, Dict, Optional
 
 class HazardDetectionClient:
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or "http://localhost:8080"
+        self.base_url = base_url or os.getenv("HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app:8000")
         self.session_id = None
     
     async def start_session(self) -> str:
@@ -494,7 +497,7 @@ class HazardDetectionClient:
 
 # Usage example
 async def process_road_images(image_paths: List[str]):
-    client = HazardDetectionClient("https://hazard-api-production-production.up.railway.app/")
+    client = HazardDetectionClient("https://hazard-api-production-production.up.railway.app:8000")
     
     try:
         # Check health

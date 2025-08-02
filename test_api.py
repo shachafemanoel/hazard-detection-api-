@@ -4,6 +4,7 @@ Simple test script for the Hazard Detection API
 Tests basic functionality without requiring model files
 """
 
+import os
 import requests
 import json
 import base64
@@ -12,7 +13,9 @@ from PIL import Image
 import numpy as np
 
 # API configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv(
+    "HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app:8000"
+)
 
 def create_test_image():
     """Create a simple test image"""

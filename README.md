@@ -56,11 +56,14 @@ A high-performance FastAPI-based object detection service for identifying road h
    export GOOGLE_MAPS_API_KEY="your_google_maps_key"
    export REDIS_URL="redis://localhost:6379"
    export CLOUDINARY_CLOUD_NAME="your_cloud_name"
-   export CLOUDINARY_API_KEY="your_api_key"
+    export CLOUDINARY_API_KEY="your_api_key"
     export CLOUDINARY_API_SECRET="your_api_secret"
     export RENDER_API_KEY="your_render_key"
     export RAILWAY_TOKEN="your_railway_token"
-   
+
+   # API base URL
+   export HAZARD_API_URL="https://hazard-api-production-production.up.railway.app:8000"
+
    # Model configuration
    export MODEL_BACKEND="auto"  # auto, openvino, pytorch
    export MODEL_DIR="/app/models"
@@ -80,13 +83,14 @@ uvicorn app:app --reload --port 8000
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at `http://localhost:8000`
+The API will be available at `https://hazard-api-production-production.up.railway.app:8000`. For local development use `http://localhost:8000`.
 
 ## 📖 API Documentation
 
 ### Base URL
+- Production: `https://hazard-api-production-production.up.railway.app:8000`
 - Development: `http://localhost:8000`
-- Production: Your deployed URL
+- You can override the base URL by setting the `HAZARD_API_URL` environment variable.
 
 ### Authentication
 No authentication required for basic detection endpoints.
@@ -238,11 +242,12 @@ POST /api/reverse-geocode?lat=40.7128&lng=-74.0060
 ### Python Client Example
 
 ```python
+import os
 import requests
 import json
 
 # Base URL
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app:8000")
 
 def detect_hazards(image_path):
     # Start a session
@@ -274,39 +279,41 @@ detect_hazards("road_image.jpg")
 ### JavaScript/Fetch Example
 
 ```javascript
+const API_URL = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app:8000';
+
 async function detectHazards(imageFile) {
     try {
         // Start session
-        const sessionResponse = await fetch('http://localhost:8000/session/start', {
+        const sessionResponse = await fetch(`${API_URL}/session/start`, {
             method: 'POST'
         });
         const sessionData = await sessionResponse.json();
         const sessionId = sessionData.session_id;
-        
+
         // Prepare form data
         const formData = new FormData();
         formData.append('file', imageFile);
-        
+
         // Detect hazards
-        const detectResponse = await fetch(`http://localhost:8000/detect/${sessionId}`, {
+        const detectResponse = await fetch(`${API_URL}/detect/${sessionId}`, {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await detectResponse.json();
-        
+
         if (result.success) {
             console.log(`Found ${result.detections.length} hazards:`);
             result.detections.forEach(detection => {
                 console.log(`- ${detection.class_name}: ${(detection.confidence * 100).toFixed(1)}%`);
             });
         }
-        
+
         // End session
-        await fetch(`http://localhost:8000/session/${sessionId}/end`, {
+        await fetch(`${API_URL}/session/${sessionId}/end`, {
             method: 'POST'
         });
-        
+
         return result;
     } catch (error) {
         console.error('Detection failed:', error);
@@ -326,21 +333,21 @@ document.getElementById('imageInput').addEventListener('change', async (event) =
 
 ```bash
 # Health check
-curl -X GET "http://localhost:8000/health"
+curl -X GET "https://hazard-api-production-production.up.railway.app:8000/health"
 
 # Start session
-curl -X POST "http://localhost:8000/session/start"
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/session/start"
 
 # Detect hazards (replace SESSION_ID with actual session ID)
-curl -X POST "http://localhost:8000/detect/SESSION_ID" \
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect/SESSION_ID" \
   -F "file=@road_image.jpg"
 
 # Legacy detection
-curl -X POST "http://localhost:8000/detect" \
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect" \
   -F "file=@road_image.jpg"
 
 # Batch detection
-curl -X POST "http://localhost:8000/detect-batch" \
+curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect-batch" \
   -F "files=@image1.jpg" \
   -F "files=@image2.jpg" \
   -F "files=@image3.jpg"

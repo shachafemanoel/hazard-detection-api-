@@ -106,12 +106,25 @@ api_manager = MockApiManager()
 geocode_location = mock_geocode_location
 upload_detection_image = mock_upload_detection_image
 cache_detection_result = mock_cache_detection_result
+reverse_geocode_location = mock_reverse_geocode_location
 
 # Try to import real API connectors but don't fail if missing
 try:
-    from api.api_connectors import api_manager as real_api_manager, geocode_location as real_geocode
+    try:
+        from api_connectors import (
+            api_manager as real_api_manager,
+            geocode_location as real_geocode,
+            reverse_geocode_location as real_reverse_geocode,
+        )
+    except ImportError:
+        from api.api_connectors import (  # type: ignore[reportMissingImports]
+            api_manager as real_api_manager,
+            geocode_location as real_geocode,
+            reverse_geocode_location as real_reverse_geocode,
+        )
     api_manager = real_api_manager
     geocode_location = real_geocode
+    reverse_geocode_location = real_reverse_geocode
     logger.info("Real API connectors loaded successfully")
 except ImportError:
     logger.info("Using mock API connectors (api_connectors module not found)")
@@ -146,7 +159,7 @@ if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RENDER"):
     # Production deployment
     allowed_origins = [
         # Trusted production domains
-        "https://hazard-api-production-production.up.railway.app",
+        "https://hazard-api-production-production.up.railway.app:8000",
         "https://hazard-detection-api.onrender.com",
     ]
 
@@ -155,6 +168,9 @@ if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RENDER"):
         origin = _validate_origin(os.getenv(env_var, ""))
         if origin:
             allowed_origins.append(origin)
+
+    # Remove any duplicate entries while preserving order
+    allowed_origins = list(dict.fromkeys(allowed_origins))
 
     allow_credentials = True
 else:
@@ -1331,16 +1347,6 @@ async def geocode_address_endpoint(address: str):
 @app.post("/api/reverse-geocode")
 async def reverse_geocode_endpoint(lat: float, lng: float):
     """Reverse geocode coordinates to address"""
-    try:
-        # Try to import the real function first
-        try:
-            from api_connectors import reverse_geocode_location
-        except ImportError:
-            from api.api_connectors import reverse_geocode_location
-    except ImportError:
-        # Use mock function if not available
-        reverse_geocode_location = mock_reverse_geocode_location
-
     try:
         response = await reverse_geocode_location(lat, lng)
         if response.success:
