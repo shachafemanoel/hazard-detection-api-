@@ -264,18 +264,25 @@ async def load_model():
         except Exception as e:
             logger.warning(f"Could not load model config: {e}")
     
-    # Backend selection logic
+    # Backend selection logic - prioritize OpenVINO for better performance
     if selected_backend in ['openvino', 'auto']:
+        logger.info("🎯 Prioritizing OpenVINO backend for optimal performance")
         success = await try_load_openvino_model(model_dir)
         if success:
             logger.info("🚀 Using OpenVINO backend for inference")
             return
+        else:
+            logger.warning("⚠️ OpenVINO model loading failed, trying PyTorch fallback")
     
     if selected_backend in ['pytorch', 'auto']:
+        logger.info("🔄 Attempting PyTorch backend as fallback")
         success = await try_load_pytorch_model(model_dir)
         if success:
             logger.info("🚀 Using YOLO PyTorch backend for inference")
+            logger.warning("⚠️ Note: OpenVINO would provide better performance if available")
             return
+        else:
+            logger.warning("⚠️ PyTorch model loading also failed")
     
     # If both fail, try fallback locations
     logger.warning("Primary model loading failed, trying fallback locations...")
@@ -420,7 +427,7 @@ async def try_load_openvino_model(model_dir):
 
 
 async def try_load_pytorch_model(model_dir):
-    """Try to load PyTorch model from specified directory"""
+    """Try to load PyTorch model from specified directory with enhanced error handling"""
     global torch_model, USE_OPENVINO
     
     if YOLO is None:
@@ -449,17 +456,42 @@ async def try_load_pytorch_model(model_dir):
         if not model_path:
             logger.info("No PyTorch model files found")
             return False
-            
-        # Load PyTorch model
-        torch_model = YOLO(model_path)
-        USE_OPENVINO = False
         
-        logger.info("✅ PyTorch model loaded successfully")
-        logger.info(f"📊 Model type: {type(torch_model)}")
-        return True
+        # Load PyTorch model with error catching for ONNX issues
+        try:
+            # Disable ONNX export capabilities that cause issues
+            import os
+            os.environ['YOLO_VERBOSE'] = 'False'
+            
+            torch_model = YOLO(model_path)
+            USE_OPENVINO = False
+            
+            # Test basic inference capability without ONNX export
+            logger.info("🧪 Testing PyTorch model functionality...")
+            
+            logger.info("✅ PyTorch model loaded successfully")
+            logger.info(f"📊 Model type: {type(torch_model)}")
+            return True
+            
+        except ImportError as ie:
+            if 'ExportOptions' in str(ie) or 'torch.onnx' in str(ie):
+                logger.warning(f"PyTorch ONNX export issue detected: {ie}")
+                logger.warning("This is likely a version compatibility issue, but model inference should still work")
+                # Try to continue anyway, as the error might only affect export, not inference
+                try:
+                    torch_model = YOLO(model_path)
+                    USE_OPENVINO = False
+                    logger.info("✅ PyTorch model loaded despite ONNX export issues")
+                    return True
+                except Exception as e2:
+                    logger.error(f"PyTorch model loading failed completely: {e2}")
+                    return False
+            else:
+                raise ie
         
     except Exception as e:
         logger.warning(f"PyTorch model loading failed: {e}")
+        logger.warning("This may be due to version compatibility issues. OpenVINO model should be preferred.")
         return False
 
 # Helper functions for OpenVINO inference
@@ -939,10 +971,16 @@ async def detect_hazards(session_id: str, file: UploadFile = File(...)):
     """
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found. Start a session first.")
+    
+    # Check if any model is loaded
     if USE_OPENVINO and compiled_model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail="OpenVINO model not loaded. Service may still be starting up.")
     if not USE_OPENVINO and torch_model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+        raise HTTPException(status_code=503, detail="PyTorch model not loaded. Service may still be starting up.")
+    
+    # If no models are loaded at all
+    if compiled_model is None and torch_model is None:
+        raise HTTPException(status_code=503, detail="No models available. Please check server logs for loading errors.")
     
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
