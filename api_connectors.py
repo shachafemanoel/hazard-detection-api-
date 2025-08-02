@@ -143,10 +143,12 @@ class RedisConnector:
         """Get or create Redis client"""
         if self.redis_client is None:
             try:
-                import aioredis
-                self.redis_client = aioredis.from_url(self.redis_url)
+                import redis.asyncio as redis
+                self.redis_client = redis.from_url(
+                    self.redis_url, encoding="utf-8", decode_responses=True
+                )
             except ImportError:
-                logger.warning("aioredis not available, caching disabled")
+                logger.warning("redis library not available, caching disabled")
                 return None
             except Exception as e:
                 logger.error(f"Redis connection failed: {e}")

@@ -128,34 +128,45 @@ app = FastAPI(title="Hazard Detection Backend", version="1.0.0", lifespan=lifesp
 
 # Enhanced CORS configuration for Render deployment
 import os
+from urllib.parse import urlparse
+
+
+def _validate_origin(url: str) -> Optional[str]:
+    """Validate and return a URL if it has a scheme and netloc."""
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        logger.warning(f"Invalid origin skipped: {url}")
+        return None
+    return url
+
 
 # Determine allowed origins based on environment
 if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RENDER"):
     # Production deployment
     allowed_origins = [
-        # Railway deployment URLs
-        "https://*.railway.app",
-        "https://*.up.railway.app", 
-        # Render deployment URLs
-        "https://*.onrender.com",
-        # Custom domains
-        os.getenv("FRONTEND_URL", ""),
-        os.getenv("WEB_SERVICE_URL", ""),
-        # Fallback
-        "*"  # Allow all origins in production for flexibility
+        # Trusted production domains
+        "https://hazard-api-production-production.up.railway.app",
+        "https://hazard-detection-api.onrender.com",
     ]
-    # Filter out empty strings
-    allowed_origins = [origin for origin in allowed_origins if origin]
+
+    # Environment-provided domains
+    for env_var in ("FRONTEND_URL", "WEB_SERVICE_URL"):
+        origin = _validate_origin(os.getenv(env_var, ""))
+        if origin:
+            allowed_origins.append(origin)
+
     allow_credentials = True
 else:
     # Development
     allowed_origins = [
         "http://localhost:3000",
         "http://localhost:8000",
-        "http://localhost:8080", 
+        "http://localhost:8080",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
-        "http://127.0.0.1:8080"
+        "http://127.0.0.1:8080",
     ]
     allow_credentials = True
 
