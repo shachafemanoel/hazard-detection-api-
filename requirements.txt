@@ -10,10 +10,11 @@ Pillow==10.1.0
 numpy==1.24.3
 opencv-python-headless==4.8.1.78
 
-# YOLOv11 and PyTorch (updated for A2C2f and C3k2 module support)
-ultralytics>=8.3.4
-torch==2.1.0
-torchvision==0.16.0
+# YOLOv12 and PyTorch (compatible versions for ONNX export)
+ultralytics>=8.3.172
+torch==2.1.2
+torchvision==0.16.2
+onnx>=1.15.0
 
 # OpenVINO for optimized inference
 openvino>=2023.1.0
