@@ -243,7 +243,7 @@ class_names = [
 # Model configuration
 MODEL_INPUT_SIZE = 512  # Updated to match new model input size
 DEVICE_NAME = "AUTO"  # Use AUTO for intelligent device selection (OpenVINO 2024 best practice)
-CACHE_ENABLED = True
+CACHE_ENABLED = False
 PERFORMANCE_MODE = "LATENCY"  # Options: "LATENCY", "THROUGHPUT", "CUMULATIVE_THROUGHPUT"
 ENABLE_ASYNC_INFERENCE = True  # Enable asynchronous inference for better performance
 
