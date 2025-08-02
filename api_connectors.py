@@ -44,7 +44,11 @@ class GoogleMapsConnector:
             }
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as response:
+                async with session.get(
+                    url,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data['status'] == 'OK' and data.get('results'):
@@ -69,6 +73,10 @@ class GoogleMapsConnector:
                             success=False,
                             error=f"HTTP {response.status}: {await response.text()}"
                         )
+        except asyncio.TimeoutError:
+            error_msg = "Geocoding request timed out"
+            logger.error(error_msg)
+            return ApiResponse(success=False, error=error_msg)
         except Exception as e:
             logger.error(f"Geocoding error: {e}")
             return ApiResponse(success=False, error=str(e))
@@ -89,7 +97,11 @@ class GoogleMapsConnector:
             }
             
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as response:
+                async with session.get(
+                    url,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data['status'] == 'OK' and data.get('results'):
@@ -112,6 +124,10 @@ class GoogleMapsConnector:
                             success=False,
                             error=f"HTTP {response.status}: {await response.text()}"
                         )
+        except asyncio.TimeoutError:
+            error_msg = "Reverse geocoding request timed out"
+            logger.error(error_msg)
+            return ApiResponse(success=False, error=error_msg)
         except Exception as e:
             logger.error(f"Reverse geocoding error: {e}")
             return ApiResponse(success=False, error=str(e))
@@ -228,7 +244,11 @@ class CloudinaryConnector:
             }
             
             async with aiohttp.ClientSession() as session:
-                async with session.post(f"{self.base_url}/image/upload", data=data) as response:
+                async with session.post(
+                    f"{self.base_url}/image/upload",
+                    data=data,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
                     if response.status == 200:
                         result = await response.json()
                         return ApiResponse(
@@ -246,6 +266,10 @@ class CloudinaryConnector:
                             success=False,
                             error=f"Upload failed: {error_text}"
                         )
+        except asyncio.TimeoutError:
+            error_msg = "Image upload request timed out"
+            logger.error(error_msg)
+            return ApiResponse(success=False, error=error_msg)
         except Exception as e:
             logger.error(f"Image upload error: {e}")
             return ApiResponse(success=False, error=str(e))
@@ -271,7 +295,11 @@ class RenderConnector:
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/services", headers=self.headers) as response:
+                async with session.get(
+                    f"{self.base_url}/services",
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         return ApiResponse(success=True, data=data)
@@ -281,6 +309,10 @@ class RenderConnector:
                             success=False,
                             error=f"Failed to get services: {error_text}"
                         )
+        except asyncio.TimeoutError:
+            error_msg = "Render API request timed out"
+            logger.error(error_msg)
+            return ApiResponse(success=False, error=error_msg)
         except Exception as e:
             logger.error(f"Render API error: {e}")
             return ApiResponse(success=False, error=str(e))
@@ -320,7 +352,12 @@ class RailwayConnector:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.base_url, headers=self.headers, json={'query': query}) as response:
+                async with session.post(
+                    self.base_url,
+                    headers=self.headers,
+                    json={'query': query},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         return ApiResponse(success=True, data=data)
@@ -330,6 +367,10 @@ class RailwayConnector:
                             success=False,
                             error=f"Failed to get services: {error_text}",
                         )
+        except asyncio.TimeoutError:
+            error_msg = "Railway API request timed out"
+            logger.error(error_msg)
+            return ApiResponse(success=False, error=error_msg)
         except Exception as e:
             logger.error(f"Railway API error: {e}")
             return ApiResponse(success=False, error=str(e))
