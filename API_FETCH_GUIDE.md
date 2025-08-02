@@ -613,7 +613,12 @@ processBatchWithProgress(imageFiles, (progress) => {
   "processing_time_ms": 1250.45,
   "model_info": {
     "backend": "openvino",
-    "classes": ["crack", "knocked", "pothole", "surface_damage"]
+    "classes": [
+      "Alligator Crack", "Block Crack", "Crosswalk Blur", "Lane Blur",
+      "Longitudinal Crack", "Manhole", "Patch Repair", "Pothole",
+      "Transverse Crack", "Wheel Mark Crack"
+    ],
+    "input_size": 512
   }
 }
 ```
