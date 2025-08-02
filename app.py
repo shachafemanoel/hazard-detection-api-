@@ -206,10 +206,14 @@ input_layer = None
 output_layer = None
 torch_model = None
 USE_OPENVINO = False
-class_names = ['crack', 'knocked', 'pothole', 'surface_damage']
+class_names = [
+    'Alligator Crack', 'Block Crack', 'Crosswalk Blur', 'Lane Blur',
+    'Longitudinal Crack', 'Manhole', 'Patch Repair', 'Pothole',
+    'Transverse Crack', 'Wheel Mark Crack'
+]
 
 # Model configuration
-MODEL_INPUT_SIZE = 640  # Standard YOLO input size
+MODEL_INPUT_SIZE = 512  # Updated to match new model input size
 DEVICE_NAME = "CPU"  # Can be changed to GPU if available
 CACHE_ENABLED = True
 
@@ -330,7 +334,9 @@ async def try_load_openvino_model(model_dir):
         
         # Look for OpenVINO model files - specific paths for this project
         model_xml_paths = [
-            os.path.join(model_dir, 'best_openvino_model', 'best.xml'),  # Primary location
+            os.path.join(model_dir, 'best_openvino_model', 'last_model_train12052025.xml'),  # New model
+            os.path.join(model_dir, 'best_openvino_model', 'best.xml'),  # Legacy model
+            os.path.join(model_dir, 'last_model_train12052025.xml'),  # Direct path to new model
             os.path.join(model_dir, 'best.xml'),  # Fallback
             os.path.join(model_dir, 'openvino', 'best.xml'),  # Alternative structure
             os.path.join(model_dir, 'model.xml')  # Generic fallback
@@ -814,9 +820,11 @@ async def health_check():
             "environment": env_info,
             "api_connectors": api_health,
             "model_files": {
-                "openvino_model": "/app/best_openvino_model/best.xml",
+                "openvino_model": "/app/best_openvino_model/last_model_train12052025.xml",
                 "pytorch_model": "/app/best.pt",
-                "current_backend": model_backend
+                "current_backend": model_backend,
+                "model_classes": len(class_names),
+                "input_size": MODEL_INPUT_SIZE
             },
             "endpoints": {
                 "session_start": "/session/start",

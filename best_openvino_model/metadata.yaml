@@ -1,0 +1,31 @@
+description: Ultralytics YOLOv12m model trained on /kaggle/working/final_dataset/dataset.yaml
+author: Ultralytics
+date: '2025-08-02T08:58:35.209901'
+version: 8.3.172
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 512
+- 512
+names:
+  0: Alligator Crack
+  1: Block Crack
+  2: Crosswalk Blur
+  3: Lane Blur
+  4: Longitudinal Crack
+  5: Manhole
+  6: Patch Repair
+  7: Pothole
+  8: Transverse Crack
+  9: Wheel Mark Crack
+args:
+  batch: 1
+  fraction: 1.0
+  half: true
+  int8: false
+  dynamic: false
+  nms: false
+channels: 3
