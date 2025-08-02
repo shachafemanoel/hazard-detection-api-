@@ -7,13 +7,11 @@ python-dotenv==1.0.0
 
 # Image processing and computer vision
 Pillow==10.1.0
-numpy==1.24.3
+numpy==1.26.4
 opencv-python-headless==4.8.1.78
 
 # YOLOv12 and PyTorch (compatible versions for ONNX export)
 ultralytics>=8.3.172
-torch==2.1.2
-torchvision==0.16.2
 onnx>=1.15.0
 
 # OpenVINO for optimized inference
