@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from PIL import Image
 from io import BytesIO
 import numpy as np
-import cv2
 import time
 import logging
 import uuid
@@ -19,6 +18,13 @@ from pathlib import Path
 # Set up logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Optional OpenCV import with graceful fallback
+try:
+    import cv2  # type: ignore[import]
+except Exception as e:  # pragma: no cover - logging import failure
+    cv2 = None  # noqa: F821
+    logger.info(f"\u26a0\ufe0f OpenCV not available: {e}")
 
 # Define placeholder API connector functions
 class MockApiResponse:
@@ -487,30 +493,46 @@ def preprocess_image(image, input_shape):
     N, C, H, W = input_shape
     target_height, target_width = H, W
     
-    # Convert PIL to OpenCV format for consistent processing
-    img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    original_height, original_width = img_cv.shape[:2]
-    
-    # Calculate scale to fit the image in target size (letterbox)
-    scale = min(target_width / original_width, target_height / original_height)
-    new_width = int(original_width * scale)
-    new_height = int(original_height * scale)
-    
-    # Resize image using OpenCV for better performance
-    resized_img = cv2.resize(img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
-    
-    # Create letterbox image with gray padding (YOLO standard)
-    letterbox_img = np.full((target_height, target_width, 3), 114, dtype=np.uint8)
-    
-    # Calculate padding offsets
-    paste_x = (target_width - new_width) // 2
-    paste_y = (target_height - new_height) // 2
-    
-    # Paste resized image onto letterbox
-    letterbox_img[paste_y:paste_y + new_height, paste_x:paste_x + new_width] = resized_img
-    
-    # Convert BGR back to RGB for model inference
-    letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
+    if cv2 is not None:
+        # Convert PIL to OpenCV format for consistent processing
+        img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        original_height, original_width = img_cv.shape[:2]
+
+        # Calculate scale to fit the image in target size (letterbox)
+        scale = min(target_width / original_width, target_height / original_height)
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+
+        # Resize image using OpenCV for better performance
+        resized_img = cv2.resize(img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+
+        # Create letterbox image with gray padding (YOLO standard)
+        letterbox_img = np.full((target_height, target_width, 3), 114, dtype=np.uint8)
+
+        # Calculate padding offsets
+        paste_x = (target_width - new_width) // 2
+        paste_y = (target_height - new_height) // 2
+
+        # Paste resized image onto letterbox
+        letterbox_img[paste_y:paste_y + new_height, paste_x:paste_x + new_width] = resized_img
+
+        # Convert BGR back to RGB for model inference
+        letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
+    else:
+        # Fallback using PIL for environments without OpenCV
+        img_rgb = image.convert("RGB")
+        original_width, original_height = img_rgb.size
+        scale = min(target_width / original_width, target_height / original_height)
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+
+        resized_img = img_rgb.resize((new_width, new_height))
+        letterbox_img = Image.new("RGB", (target_width, target_height), (114, 114, 114))
+        paste_x = (target_width - new_width) // 2
+        paste_y = (target_height - new_height) // 2
+        letterbox_img.paste(resized_img, (paste_x, paste_y))
+
+        letterbox_img = np.array(letterbox_img)
     
     # Convert to float32 and normalize to [0, 1] as expected by YOLO
     img_array = letterbox_img.astype(np.float32) / 255.0
