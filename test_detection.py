@@ -3,12 +3,22 @@ import requests
 import subprocess
 import time
 import os
+import socket
 from PIL import Image, ImageDraw
 from io import BytesIO
 import signal
 
-# Define the base URL for the API
-API_BASE_URL = "http://localhost:8000"
+
+def _get_free_port() -> int:
+    """Return an available port on the host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+# Select a free port for the API server to avoid collisions
+API_PORT = _get_free_port()
+API_BASE_URL = f"http://localhost:{API_PORT}"
 
 @pytest.fixture(scope="module")
 def api_server():
@@ -16,8 +26,12 @@ def api_server():
     # Command to start the server
     command = ["python", "app.py"]
 
+    # Ensure the server uses the dynamically selected port
+    env = os.environ.copy()
+    env["PORT"] = str(API_PORT)
+
     # Start the server as a subprocess
-    server_process = subprocess.Popen(command)
+    server_process = subprocess.Popen(command, env=env)
 
     # Wait for the server to be ready by polling the health endpoint
     max_wait = 60  # seconds
