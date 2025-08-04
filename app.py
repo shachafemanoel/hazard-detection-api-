@@ -861,23 +861,29 @@ def create_report(detection, session_id, image_data=None):
 
 @app.get("/health")
 async def health_check():
+    """
+    A lightweight health check endpoint for Railway.
+    This should return a 200 OK response quickly to indicate the service is alive.
+    """
+    return {"status": "ok"}
+
+@app.get("/status")
+async def get_status():
+    """Provides detailed status information about the service."""
     try:
-        # Always return healthy status for Railway health checks
-        # This ensures the service is considered healthy even during model loading
-        
         # Determine model status based on which backend is loaded
         if USE_OPENVINO and compiled_model is not None:
             model_status = "loaded_openvino"
             model_backend = "openvino"
         elif not USE_OPENVINO and torch_model is not None:
-            model_status = "loaded_pytorch" 
+            model_status = "loaded_pytorch"
             model_backend = "pytorch"
         else:
             model_status = "loading"  # More optimistic status during startup
             model_backend = "auto"
-        
+
         device_info = None
-        
+
         # Get device information based on loaded model
         if USE_OPENVINO and compiled_model is not None:
             try:
@@ -904,10 +910,10 @@ async def health_check():
                 }
             except Exception as e:
                 logger.warning(f"Could not get PyTorch model info: {e}")
-        
+
         # Get server environment info for mobile debugging
         import platform
-        
+
         env_info = {
             "platform": platform.system(),
             "python_version": platform.python_version(),
@@ -917,7 +923,7 @@ async def health_check():
             "cors_enabled": True,
             "mobile_friendly": True
         }
-        
+
         # Check external API connectivity if available
         api_health = None
         if api_manager is not None:
@@ -926,7 +932,7 @@ async def health_check():
             except Exception as e:
                 logger.warning(f"API health check failed: {e}")
                 api_health = {"status": "error", "message": str(e)}
-        
+
         return {
             "status": "healthy",
             "model_status": model_status,
@@ -944,6 +950,8 @@ async def health_check():
                 "input_size": MODEL_INPUT_SIZE
             },
             "endpoints": {
+                "health": "/health",
+                "status": "/status",
                 "session_start": "/session/start",
                 "session_detect": "/detect/{session_id}",
                 "legacy_detect": "/detect",
@@ -954,15 +962,9 @@ async def health_check():
             }
         }
     except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return {
-            "status": "healthy",  # Always return healthy for Railway gateway
-            "model_status": "starting",
-            "backend_inference": False,
-            "backend_type": "auto",
-            "message": "Service is starting up",
-            "uptime": "initializing"
-        }
+        logger.error(f"Status check error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
 
 @app.get("/")
 async def root():
@@ -1075,7 +1077,9 @@ async def detect_hazards(session_id: str, file: UploadFile = File(...)):
         
         # Read and process image
         contents = await file.read()
-        image = Image.open(BytesIO(contents)).convert("RGB")
+        image_stream = BytesIO(contents)
+        image_stream.seek(0)
+        image = Image.open(image_stream).convert("RGB")
         
         # Store original image data for reports
         image_base64 = base64.b64encode(contents).decode('utf-8')
@@ -1221,7 +1225,9 @@ async def detect_batch(files: list[UploadFile] = File(...)):
         try:
             # Process each image
             contents = await file.read()
-            image = Image.open(BytesIO(contents)).convert("RGB")
+            image_stream = BytesIO(contents)
+            image_stream.seek(0)
+            image = Image.open(image_stream).convert("RGB")
             
             if USE_OPENVINO:
                 input_shape = input_layer.shape
@@ -1298,7 +1304,9 @@ async def detect_hazards_legacy(file: UploadFile = File(...)):
         
         # Read and process image
         contents = await file.read()
-        image = Image.open(BytesIO(contents)).convert("RGB")
+        image_stream = BytesIO(contents)
+        image_stream.seek(0)
+        image = Image.open(image_stream).convert("RGB")
         
         # Store original image data for reports
         image_base64 = base64.b64encode(contents).decode('utf-8')

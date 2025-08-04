@@ -1,534 +1,137 @@
 # Hazard Detection API
 
-A high-performance FastAPI-based object detection service for identifying road hazards using computer vision. The API supports both OpenVINO and PyTorch backends for flexible deployment scenarios.
+[![Deployment on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/your-username/your-repo-name)
 
-## 🚀 Features
+This is a high-performance FastAPI backend for real-time hazard detection on roads. It uses a YOLOv8 model, optimized with OpenVINO, to identify various types of road damage from images or video streams.
 
-- **Real-time Object Detection**: Detect road hazards including cracks, potholes, knocked surfaces, and surface damage
-- **Dual Backend Support**: OpenVINO for optimized CPU inference and PyTorch/YOLO for flexibility
-- **Session Management**: Track detections across multiple images with intelligent duplicate filtering
-- **External Service Integration**: Support for geocoding, caching, and cloud storage
-- **Production Ready**: CORS configured, deployment-ready for Railway, Render, and other platforms
-- **Mobile Friendly**: Optimized for mobile device integration
+The API is designed for scalability and can be deployed easily to cloud platforms like Railway.
 
-## 📋 Supported Hazard Types
+## ✨ Features
 
-- `crack` - Road surface cracks
-- `knocked` - Knocked or damaged surfaces  
-- `pothole` - Potholes and road holes
-- `surface_damage` - General surface damage
+*   **High-Performance Inference:** Utilizes OpenVINO for optimized model inference on CPUs, with a fallback to PyTorch.
+*   **Intelligent Model Loading:** Automatically selects the best available backend (OpenVINO or PyTorch).
+*   **Real-time and Batch Processing:** Endpoints for both single-image and batch processing.
+*   **Session Management:** Track and manage detection sessions for continuous monitoring.
+*   **Object Tracking:** Basic tracking to identify unique hazards and avoid duplicate reports.
+*   **CORS Enabled:** Properly configured for integration with web-based frontends.
+*   **Deploy-Ready:** Includes configurations for Railway and a Dockerfile for containerization.
 
-## 🛠️ Installation
+##  Detected Hazard Classes
+
+The model is trained to detect the following 10 classes of road hazards:
+1.  Alligator Crack
+2.  Block Crack
+3.  Crosswalk Blur
+4.  Lane Blur
+5.  Longitudinal Crack
+6.  Manhole
+7.  Patch Repair
+8.  Pothole
+9.  Transverse Crack
+10. Wheel Mark Crack
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
-- Virtual environment (recommended)
+*   Python 3.10+
+*   Pip for package management
 
-### Setup
+### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd hazard-detection-api
-   ```
+1.  **Clone the repository:**
+    ```bash
+    git clone <your-repo-url>
+    cd <your-repo-directory>
+    ```
 
-2. **Create and activate virtual environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+2.  **Create a virtual environment:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    ```
 
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+3.  **Install the dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-4. **Add model files**
-   - Place your YOLO model (`best.pt`) in the root directory
-   - For OpenVINO, place model files in `best_openvino_model/` directory:
-     - `best.xml` (model architecture)
-     - `best.bin` (model weights)
+### Running the Server Locally
 
-5. **Configure environment variables (optional)**
-   ```bash
-   # External API services (optional)
-   export GOOGLE_MAPS_API_KEY="your_google_maps_key"
-   export REDIS_URL="redis://localhost:6379"
-   export CLOUDINARY_CLOUD_NAME="your_cloud_name"
-    export CLOUDINARY_API_KEY="your_api_key"
-    export CLOUDINARY_API_SECRET="your_api_secret"
-    export RENDER_API_KEY="your_render_key"
-    export RAILWAY_TOKEN="your_railway_token"
-
-   # API base URL
-   export HAZARD_API_URL="https://hazard-api-production-production.up.railway.app:8000"
-
-   # Model configuration
-   export MODEL_BACKEND="auto"  # auto, openvino, pytorch
-   export MODEL_DIR="/app/models"
-   ```
-
-## 🚀 Running the API
-
-### Development
-```bash
-python app.py
-# or
-uvicorn app:app --reload --port 8000
-```
-
-### Production
-```bash
-uvicorn app:app --host 0.0.0.0 --port 8000
-```
-
-The API will be available at `https://hazard-api-production-production.up.railway.app:8000`. For local development use `http://localhost:8000`.
-
-## 📖 API Documentation
-
-### Base URL
-- Production: `https://hazard-api-production-production.up.railway.app:8000`
-- Development: `http://localhost:8000`
-- You can override the base URL by setting the `HAZARD_API_URL` environment variable.
-
-### Authentication
-No authentication required for basic detection endpoints.
-
-## 🔗 API Endpoints
-
-### Health Check
-```http
-GET /health
-```
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "model_status": "loaded_openvino",
-  "backend_inference": true,
-  "backend_type": "openvino",
-  "active_sessions": 0,
-  "device_info": {
-    "device": "CPU",
-    "input_shape": [1, 3, 640, 640],
-    "output_shape": [1, 25200, 85],
-    "backend": "openvino"
-  }
-}
-```
-
-### Root Endpoint
-```http
-GET /
-```
-
-### Session Management
-
-#### Start Session
-```http
-POST /session/start
-```
-
-**Response:**
-```json
-{
-  "session_id": "uuid-string",
-  "message": "Detection session started"
-}
-```
-
-#### Get Session Summary
-```http
-GET /session/{session_id}/summary
-```
-
-#### End Session
-```http
-POST /session/{session_id}/end
-```
-
-### Detection Endpoints
-
-#### Session-based Detection (Recommended)
-```http
-POST /detect/{session_id}
-Content-Type: multipart/form-data
-
-file: [image file]
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "detections": [
-    {
-      "bbox": [x1, y1, x2, y2],
-      "confidence": 0.85,
-      "class_id": 0,
-      "class_name": "pothole",
-      "center_x": 320.5,
-      "center_y": 240.0,
-      "width": 150.0,
-      "height": 80.0,
-      "area": 12000.0,
-      "is_new": true,
-      "report_id": "uuid-string"
-    }
-  ],
-  "new_reports": [...],
-  "session_stats": {
-    "total_detections": 1,
-    "unique_hazards": 1,
-    "pending_reports": 1
-  },
-  "processing_time_ms": 45.2,
-  "model_info": {
-    "backend": "openvino",
-    "classes": ["crack", "knocked", "pothole", "surface_damage"]
-  }
-}
-```
-
-#### Legacy Detection
-```http
-POST /detect
-Content-Type: multipart/form-data
-
-file: [image file]
-```
-
-#### Batch Detection
-```http
-POST /detect-batch
-Content-Type: multipart/form-data
-
-files: [multiple image files]
-```
-
-### Report Management
-
-#### Confirm Report
-```http
-POST /session/{session_id}/report/{report_id}/confirm
-```
-
-#### Dismiss Report
-```http
-POST /session/{session_id}/report/{report_id}/dismiss
-```
-
-### External API Endpoints
-
-#### API Health Check
-```http
-GET /api/health
-```
-
-#### Geocoding
-```http
-POST /api/geocode?address=New York, NY
-```
-
-#### Reverse Geocoding
-```http
-POST /api/reverse-geocode?lat=40.7128&lng=-74.0060
-```
-
-## 💻 Usage Examples
-
-### Python Client Example
-
-```python
-import os
-import requests
-import json
-
-# Base URL
-API_URL = os.getenv("HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app:8000")
-
-def detect_hazards(image_path):
-    # Start a session
-    session_response = requests.post(f"{API_URL}/session/start")
-    session_id = session_response.json()["session_id"]
-    
-    # Upload image for detection
-    with open(image_path, 'rb') as image_file:
-        files = {'file': image_file}
-        response = requests.post(f"{API_URL}/detect/{session_id}", files=files)
-    
-    if response.status_code == 200:
-        result = response.json()
-        print(f"Found {len(result['detections'])} hazards:")
-        
-        for detection in result['detections']:
-            print(f"- {detection['class_name']}: {detection['confidence']:.2f} confidence")
-            print(f"  Location: ({detection['center_x']:.1f}, {detection['center_y']:.1f})")
-            if detection['is_new']:
-                print(f"  New hazard! Report ID: {detection['report_id']}")
-    
-    # End session
-    requests.post(f"{API_URL}/session/{session_id}/end")
-
-# Usage
-detect_hazards("road_image.jpg")
-```
-
-### JavaScript/Fetch Example
-
-```javascript
-const API_URL = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app:8000';
-
-async function detectHazards(imageFile) {
-    try {
-        // Start session
-        const sessionResponse = await fetch(`${API_URL}/session/start`, {
-            method: 'POST'
-        });
-        const sessionData = await sessionResponse.json();
-        const sessionId = sessionData.session_id;
-
-        // Prepare form data
-        const formData = new FormData();
-        formData.append('file', imageFile);
-
-        // Detect hazards
-        const detectResponse = await fetch(`${API_URL}/detect/${sessionId}`, {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await detectResponse.json();
-
-        if (result.success) {
-            console.log(`Found ${result.detections.length} hazards:`);
-            result.detections.forEach(detection => {
-                console.log(`- ${detection.class_name}: ${(detection.confidence * 100).toFixed(1)}%`);
-            });
-        }
-
-        // End session
-        await fetch(`${API_URL}/session/${sessionId}/end`, {
-            method: 'POST'
-        });
-
-        return result;
-    } catch (error) {
-        console.error('Detection failed:', error);
-    }
-}
-
-// Usage with file input
-document.getElementById('imageInput').addEventListener('change', async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-        await detectHazards(file);
-    }
-});
-```
-
-### cURL Examples
+Once the dependencies are installed, you can start the API server using Uvicorn:
 
 ```bash
-# Health check
-curl -X GET "https://hazard-api-production-production.up.railway.app:8000/health"
-
-# Start session
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/session/start"
-
-# Detect hazards (replace SESSION_ID with actual session ID)
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect/SESSION_ID" \
-  -F "file=@road_image.jpg"
-
-# Legacy detection
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect" \
-  -F "file=@road_image.jpg"
-
-# Batch detection
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/detect-batch" \
-  -F "files=@image1.jpg" \
-  -F "files=@image2.jpg" \
-  -F "files=@image3.jpg"
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## 🧪 Testing
+The server will be available at `http://127.0.0.1:8000`.
 
-Run the included test suite:
+##  API Endpoints
 
-```bash
-# Make sure the API is running on localhost:8000
-python test_api.py
-```
+The API provides the following endpoints:
 
-The test suite checks:
-- Health endpoints
-- Session management
-- Detection endpoints
-- API connector functionality
+### Service Health and Status
 
-## 🚀 Deployment
+*   `GET /health`
+    *   A lightweight endpoint to check if the service is running. Ideal for platform health checks.
+    *   **Response:** `{"status": "ok"}`
 
-### Railway (Recommended)
+*   `GET /status`
+    *   Provides a detailed status of the service, including model status, device info, and environment configuration.
+    *   **Response:** A detailed JSON object with service diagnostics.
 
-#### Quick Deployment
-```bash
-# Run the automated deployment script
-./deploy_railway.sh
-```
+### Core Functionality
 
-#### Manual Deployment
-1. **Install Railway CLI**
-   ```bash
-   npm install -g @railway/cli
-   railway login
-   ```
+*   `POST /session/start`
+    *   Starts a new detection session.
+    *   **Response:** `{"session_id": "...", "message": "Detection session started"}`
 
-2. **Deploy from GitHub**
-   - Connect repository to Railway dashboard
-   - Railway will automatically detect Python project
-   - Uses the included `railway.toml` configuration
+*   `POST /detect/{session_id}`
+    *   Upload an image to a specific session for hazard detection. Includes basic object tracking to identify new hazards.
+    *   **Request Body:** `multipart/form-data` with an image file.
+    *   **Response:** JSON with detections, new reports, and session stats.
 
-3. **Set Environment Variables** (in Railway dashboard)
-   ```bash
-   MODEL_BACKEND=auto
-   MODEL_DIR=/app
-   RAILWAY_ENVIRONMENT_NAME=production
-   ```
-   Railway automatically sets the `PORT` value for you.
+*   `POST /detect`
+    *   A legacy endpoint for single-image detection without session management.
+    *   **Request Body:** `multipart/form-data` with an image file.
+    *   **Response:** JSON with detections and processing time.
 
-4. **Your API will be available at:**
-   ```
-   https://your-project-name.up.railway.app
-   ```
-
-#### Integration from Other Services
-```python
-# Set environment variable in your client service
-HAZARD_API_URL=https://your-project-name.up.railway.app
-
-# Use the integration example
-python integration_example.py
-```
-
-**📋 See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for complete Railway deployment and integration guide.**
-
-### Render
-
-1. Connect repository to Render
-2. Set environment variables
-3. Use the build command: `pip install -r requirements.txt`
-4. Use the start command: `python app.py`
-
-### Docker
-
-Use the provided multi-stage `Dockerfile` to containerize the API:
-
-```bash
-# Build the image
-docker build -t hazard-detection-api .
-
-# Run the container
-docker run -p 8080:8080 hazard-detection-api
-```
-
-The image uses Python 3.11 and exposes port `8080` via the `PORT` environment variable.
+*   `POST /detect-batch`
+    *   Upload multiple images for batch processing.
+    *   **Request Body:** `multipart/form-data` with multiple image files.
+    *   **Response:** A list of results for each image.
 
 ## ⚙️ Configuration
 
-### Model Backend Selection
+The application can be configured using environment variables:
 
-The API automatically selects the best available backend:
+*   `PORT`: The port on which the server will run. Defaults to `8000`.
+*   `MODEL_DIR`: The directory where the model files (`best.pt`, `best_openvino_model/`) are located. Defaults to `/app`.
+*   `MODEL_BACKEND`: The preferred model backend. Options are `auto`, `openvino`, or `pytorch`. `auto` will prioritize OpenVINO if available.
+*   `PYTHONPATH`: Should be set to the application's root directory to ensure modules are found. Defaults to `/app`.
+*   `FRONTEND_URL`: The URL of your frontend application, to be included in the CORS allowed origins.
 
-1. **Auto mode (default)**: Tries OpenVINO first, falls back to PyTorch
-2. **OpenVINO mode**: CPU-optimized inference with Intel OpenVINO
-3. **PyTorch mode**: Uses Ultralytics YOLO implementation
+## 🐳 Docker
 
-Set via environment variable:
-```bash
-export MODEL_BACKEND="auto"  # auto, openvino, pytorch
-```
+A `Dockerfile` is provided to build a container image for the application.
 
-### External Services
-
-Configure optional external services via environment variables:
+**Build the image:**
 
 ```bash
-# Google Maps (for geocoding)
-GOOGLE_MAPS_API_KEY=your_key
-
-# Redis (for caching)
-REDIS_URL=redis://localhost:6379
-
-# Cloudinary (for image storage)
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_key
-CLOUDINARY_API_SECRET=your_secret
-
-# Render (for deployment management)
-RENDER_API_KEY=your_key
+docker build -t hazard-detection-api .
 ```
 
-## 🔧 Model Training
+**Run the container:**
 
-To train your own model:
+```bash
+docker run -p 8000:8000 -e PORT=8000 hazard-detection-api
+```
 
-1. Prepare dataset in YOLO format
-2. Train using Ultralytics:
-   ```python
-   from ultralytics import YOLO
-   
-   model = YOLO('yolo11n.pt')
-   results = model.train(data='dataset.yaml', epochs=100)
-   ```
-3. Export to OpenVINO format:
-   ```python
-   model.export(format='openvino')
-   ```
+## 🚂 Deployment on Railway
 
-## 📊 Performance
+This project is configured for easy deployment on Railway.
 
-### Typical Performance Metrics
-
-- **OpenVINO CPU**: ~50-100ms per image (640x640)
-- **PyTorch CPU**: ~100-200ms per image (640x640)
-- **Memory Usage**: ~500MB-1GB depending on backend
-- **Accuracy**: 85-95% mAP on road hazard datasets
-
-### Optimization Tips
-
-1. Use OpenVINO for CPU deployment
-2. Enable model caching
-3. Resize images to 640x640 for best speed/accuracy balance
-4. Use batch detection for multiple images
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📄 License
-
-[Your License Here]
-
-## 🆘 Support
-
-For issues and questions:
-
-1. Check the health endpoint for system status
-2. Review logs for error details
-3. Ensure model files are properly placed
-4. Verify dependencies are installed correctly
-
-## 🔄 Changelog
-
-### v1.0.0
-- Initial release
-- OpenVINO and PyTorch backend support
-- Session-based detection with duplicate filtering
-- External API integrations
-- Production deployment ready
+1.  **Click the Deploy Button:** Use the "Deploy on Railway" button at the top of this README.
+2.  **Connect Your Repo:** Connect your GitHub repository to the Railway project.
+3.  **Configure Environment Variables:** Railway will automatically use the `railway.toml` file. You can add any additional environment variables in the project's settings on Railway.
+4.  **Deployment:** Railway will build and deploy the application automatically. The `healthcheckPath` is set to `/health`, ensuring a reliable startup.
