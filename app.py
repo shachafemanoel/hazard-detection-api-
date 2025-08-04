@@ -132,97 +132,15 @@ except ImportError:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start model loading in background to prevent startup timeout
-    import asyncio
-    asyncio.create_task(load_model_async())
     yield
 
 
 app = FastAPI(title="Hazard Detection Backend", version="1.0.0", lifespan=lifespan)
-# Enhanced CORS configuration for Render deployment
-from urllib.parse import urlparse
-
-
-def _validate_origin(url: str) -> Optional[str]:
-    """Validate and return a URL if it has a scheme and netloc."""
-    if not url:
-        return None
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        logger.warning(f"Invalid origin skipped: {url}")
-        return None
-    return url
-
-
-# Determine allowed origins based on environment
-if os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RENDER"):
-    # Production deployment
-    allowed_origins = [
-        # Trusted production domains
-        "https://hazard-api-production-production.up.railway.app:8000",
-        "https://hazard-detection-api.onrender.com",
-    ]
-
-    # Environment-provided domains
-    for env_var in ("FRONTEND_URL", "WEB_SERVICE_URL"):
-        origin = _validate_origin(os.getenv(env_var, ""))
-        if origin:
-            allowed_origins.append(origin)
-
-    # Remove any duplicate entries while preserving order
-    allowed_origins = list(dict.fromkeys(allowed_origins))
-
-    allow_credentials = True
-else:
-    # Development
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:8000",
-        "http://localhost:8080",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-        "http://127.0.0.1:8080",
-    ]
-    allow_credentials = True
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=allow_credentials,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=[
-        "Accept",
-        "Accept-Language", 
-        "Accept-Encoding",
-        "Accept-Charset",
-        "Content-Language",
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Origin",
-        "Access-Control-Request-Method",
-        "Access-Control-Request-Headers",
-        "User-Agent",
-        "Cache-Control",
-        "Pragma",
-        "DNT",
-        "Sec-Fetch-Site",
-        "Sec-Fetch-Mode",
-        "Sec-Fetch-Dest",
-        # Mobile and deployment headers
-        "X-Forwarded-For",
-        "X-Real-IP",
-        "X-Forwarded-Proto",
-        "X-Forwarded-Host"
-    ],
-    expose_headers=[
-        "Content-Type",
-        "Content-Length",
-        "X-Total-Count",
-        "Access-Control-Allow-Origin",
-        "Access-Control-Allow-Methods",
-        "Access-Control-Allow-Headers"
-    ]
+    allow_origins=["https://<node-service>.railway.app"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"]
 )
 
 # Global variables for OpenVINO model and class names
@@ -255,16 +173,6 @@ active_detections = defaultdict(list)  # session_id -> list of detections
 TRACKING_DISTANCE_THRESHOLD = 50  # pixels
 TRACKING_TIME_THRESHOLD = 2.0  # seconds
 MIN_CONFIDENCE_FOR_REPORT = 0.6
-
-# Background model loading to prevent startup timeout
-async def load_model_async():
-    """Load model asynchronously in background"""
-    try:
-        logger.info("🔄 Starting background model loading...")
-        await load_model()
-        logger.info("✅ Background model loading completed")
-    except Exception as e:
-        logger.error(f"❌ Background model loading failed: {e}")
 
 # Enhanced model loading with intelligent backend selection
 async def load_model():
@@ -336,6 +244,11 @@ async def load_model():
                 return
     
     logger.error("❌ All model loading attempts failed!")
+
+
+async def ensure_model_loaded():
+    if compiled_model is None and torch_model is None:
+        await load_model()
 
 
 async def try_load_openvino_model(model_dir):
@@ -860,12 +773,8 @@ def create_report(detection, session_id, image_data=None):
     return report
 
 @app.get("/health")
-async def health_check():
-    """
-    A lightweight health check endpoint for Railway.
-    This should return a 200 OK response quickly to indicate the service is alive.
-    """
-    return {"status": "ok"}
+async def health():
+    return {"status": "healthy"}
 
 @app.get("/status")
 async def get_status():
@@ -989,11 +898,8 @@ async def start_session():
         'unique_hazards': 0
     }
     active_detections[session_id] = []
-    
-    return {
-        "session_id": session_id,
-        "message": "Detection session started"
-    }
+
+    return {"session_id": session_id}
 
 @app.post("/session/{session_id}/end")
 async def end_session(session_id: str):
@@ -1001,18 +907,9 @@ async def end_session(session_id: str):
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    session = sessions[session_id]
-    session['end_time'] = datetime.now().isoformat()
-    
-    # Clean up active detections for this session
-    if session_id in active_detections:
-        del active_detections[session_id]
-    
-    return {
-        "session_id": session_id,
-        "summary": session,
-        "message": "Session ended successfully"
-    }
+    sessions.pop(session_id, None)
+    active_detections.pop(session_id, None)
+    return {"message": "Session ended"}
 
 @app.get("/session/{session_id}/summary")
 async def get_session_summary(session_id: str):
@@ -1051,27 +948,26 @@ async def dismiss_report(session_id: str, report_id: str):
     raise HTTPException(status_code=404, detail="Report not found")
 
 @app.post("/detect/{session_id}")
-async def detect_hazards(session_id: str, file: UploadFile = File(...)):
+async def detect_hazards(session_id: str, file: UploadFile | None = File(None)):
     """
     Enhanced detection endpoint with object tracking and report generation
     Returns detections and creates reports for new unique hazards
     """
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found. Start a session first.")
-    
-    # Check if any model is loaded
+
+    if file is None or not file.filename or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=422, detail="File field required")
+
+    await ensure_model_loaded()
+
     if USE_OPENVINO and compiled_model is None:
         raise HTTPException(status_code=503, detail="OpenVINO model not loaded. Service may still be starting up.")
     if not USE_OPENVINO and torch_model is None:
         raise HTTPException(status_code=503, detail="PyTorch model not loaded. Service may still be starting up.")
-    
-    # If no models are loaded at all
     if compiled_model is None and torch_model is None:
         raise HTTPException(status_code=503, detail="No models available. Please check server logs for loading errors.")
-    
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
+
     try:
         start_time = time.time()
         
@@ -1198,7 +1094,7 @@ async def detect_hazards(session_id: str, file: UploadFile = File(...)):
         
     except Exception as e:
         logger.error(f"Detection error: {e}")
-        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
 @app.post("/detect-batch")
 async def detect_batch(files: list[UploadFile] = File(...)):
@@ -1466,19 +1362,6 @@ async def render_status():
 # Add main entry point for Render deployment
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    
-    # Log startup information
-    logger.info(f"🚀 Starting FastAPI server on port {port}")
-    logger.info(f"🌍 Environment: {'Production (Railway)' if os.getenv('RAILWAY_ENVIRONMENT_NAME') else 'Production (Render)' if os.getenv('RENDER') else 'Development'}")
-    logger.info(f"🔗 CORS origins configured: {len(allowed_origins)} origins")
-    logger.info(f"📁 Model directory: {os.getenv('MODEL_DIR', '/app')}")
-    logger.info(f"🧠 Model backend: {os.getenv('MODEL_BACKEND', 'auto')}")
-    
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=port,
-        log_level="info",
-        access_log=True
-    )
+    port = int(os.getenv("PORT", 8080))
+    print("🔒 OpenVINO API runtime listening privately on port 8080")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, log_level="info", access_log=True)
