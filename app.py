@@ -1077,7 +1077,9 @@ async def detect_hazards(session_id: str, file: UploadFile = File(...)):
         
         # Read and process image
         contents = await file.read()
-        image = Image.open(BytesIO(contents)).convert("RGB")
+        image_stream = BytesIO(contents)
+        image_stream.seek(0)
+        image = Image.open(image_stream).convert("RGB")
         
         # Store original image data for reports
         image_base64 = base64.b64encode(contents).decode('utf-8')
@@ -1223,7 +1225,9 @@ async def detect_batch(files: list[UploadFile] = File(...)):
         try:
             # Process each image
             contents = await file.read()
-            image = Image.open(BytesIO(contents)).convert("RGB")
+            image_stream = BytesIO(contents)
+            image_stream.seek(0)
+            image = Image.open(image_stream).convert("RGB")
             
             if USE_OPENVINO:
                 input_shape = input_layer.shape
@@ -1300,7 +1304,9 @@ async def detect_hazards_legacy(file: UploadFile = File(...)):
         
         # Read and process image
         contents = await file.read()
-        image = Image.open(BytesIO(contents)).convert("RGB")
+        image_stream = BytesIO(contents)
+        image_stream.seek(0)
+        image = Image.open(image_stream).convert("RGB")
         
         # Store original image data for reports
         image_base64 = base64.b64encode(contents).decode('utf-8')
