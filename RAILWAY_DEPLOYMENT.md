@@ -36,6 +36,8 @@ railway init
 railway up
 ```
 
+Once the service is deployed, open the service **Settings** in Railway and disable **Public Networking** while keeping **Private Networking** enabled. This ensures the OpenVINO API is reachable only within Railway's internal network.
+
 ### 3. Configure Environment Variables
 
 Set these in Railway Dashboard → Your Project → Variables:
