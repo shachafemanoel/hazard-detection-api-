@@ -25,3 +25,6 @@ requests>=2.31.0
 tqdm>=4.64.0
 aiohttp>=3.8.0
 redis>=5.0
+# httpx pinned below 0.27 for compatibility with starlette TestClient
+httpx<0.27
+
