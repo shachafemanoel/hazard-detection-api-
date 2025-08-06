@@ -18,7 +18,7 @@ from ..core.exceptions import (
     InvalidImageException,
     InferenceException,
 )
-from ..services.model_service import model_service
+from ..services import model_service as model_service_module
 from ..services.session_service import session_service
 
 logger = get_logger("detection_api")
@@ -46,9 +46,13 @@ async def detect_hazards_with_session(
         )
 
     try:
+        # Validate session exists before heavy processing
+        session_service.get_session(session_id)
+
+        ms = model_service_module.model_service
         # Ensure model is loaded
-        if not model_service.is_loaded:
-            await model_service.load_model()
+        if not ms.is_loaded:
+            await ms.load_model()
 
         start_time = time.time()
 
@@ -66,7 +70,7 @@ async def detect_hazards_with_session(
         image_base64 = base64.b64encode(contents).decode("utf-8")
 
         # Run model inference
-        detections = await model_service.predict(image)
+        detections = await ms.predict(image)
 
         # Process detections with session tracking
         processing_result = session_service.process_detections(
@@ -87,7 +91,7 @@ async def detect_hazards_with_session(
             "processing_time_ms": processing_time,
             "image_size": {"width": image.width, "height": image.height},
             "model_info": {
-                **model_service.get_model_info(),
+                **ms.get_model_info(),
                 "confidence_threshold": settings.min_confidence_for_report,
                 "tracking_enabled": True,
             },
@@ -106,16 +110,17 @@ async def detect_hazards_with_session(
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 
-@router.post("/detect")
+@router.post("/detect-base64")
 async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict[str, Any]:
     """
     Detection endpoint that accepts base64 image data
     Supports the frontend camera detection app format
     """
     try:
+        ms = model_service_module.model_service
         # Ensure model is loaded
-        if not model_service.is_loaded:
-            await model_service.load_model()
+        if not ms.is_loaded:
+            await ms.load_model()
 
         start_time = time.time()
 
@@ -128,7 +133,7 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
             raise InvalidImageException(f"Failed to decode base64 image: {str(e)}")
 
         # Run model inference
-        detections = await model_service.predict(image)
+        detections = await ms.predict(image)
 
         # Convert detections to frontend-compatible format
         frontend_detections = []
@@ -157,8 +162,8 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
             "processing_time_ms": processing_time,
             "image_size": {"width": image.width, "height": image.height},
             "model_info": {
-                **model_service.get_model_info(),
-                "classes": len(model_service.get_model_info().get("classes", [])),
+                **ms.get_model_info(),
+                "classes": len(ms.get_model_info().get("classes", [])),
                 "confidence_threshold": detection_request.confidence_threshold,
             },
         }
@@ -174,7 +179,7 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 
-@router.post("/detect-file")
+@router.post("/detect")
 async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
     Legacy detection endpoint that accepts file uploads
@@ -184,9 +189,10 @@ async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="File must be an image")
 
     try:
+        ms = model_service_module.model_service
         # Ensure model is loaded
-        if not model_service.is_loaded:
-            await model_service.load_model()
+        if not ms.is_loaded:
+            await ms.load_model()
 
         start_time = time.time()
 
@@ -201,7 +207,7 @@ async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
             raise InvalidImageException(f"Failed to process image: {str(e)}")
 
         # Run model inference
-        detections = await model_service.predict(image)
+        detections = await ms.predict(image)
 
         # Convert detections to dictionary format
         detection_dicts = [detection.to_dict() for detection in detections]
@@ -218,8 +224,8 @@ async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
             "processing_time_ms": processing_time,
             "image_size": {"width": image.width, "height": image.height},
             "model_info": {
-                **model_service.get_model_info(),
-                "classes": len(model_service.get_model_info().get("classes", [])),
+                **ms.get_model_info(),
+                "classes": len(ms.get_model_info().get("classes", [])),
             },
         }
 
@@ -240,9 +246,10 @@ async def detect_batch(files: List[UploadFile] = File(...)) -> Dict[str, Any]:
     Batch detection endpoint for processing multiple images
     """
     try:
+        ms = model_service_module.model_service
         # Ensure model is loaded
-        if not model_service.is_loaded:
-            await model_service.load_model()
+        if not ms.is_loaded:
+            await ms.load_model()
 
         results = []
         start_time = time.time()
@@ -266,7 +273,7 @@ async def detect_batch(files: List[UploadFile] = File(...)) -> Dict[str, Any]:
                 image = Image.open(image_stream).convert("RGB")
 
                 # Run inference
-                detections = await model_service.predict(image)
+                detections = await ms.predict(image)
 
                 # Format results
                 detection_dicts = [detection.to_dict() for detection in detections]
@@ -300,7 +307,7 @@ async def detect_batch(files: List[UploadFile] = File(...)) -> Dict[str, Any]:
             "total_processing_time_ms": total_time,
             "processed_count": len(files),
             "successful_count": successful_count,
-            "model_info": model_service.get_model_info(),
+            "model_info": ms.get_model_info(),
         }
 
     except ModelNotLoadedException as e:

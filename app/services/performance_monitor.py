@@ -1,318 +1,206 @@
-"""
-Performance monitoring service for tracking API and model performance
+"""Performance monitoring service.
+
+This module provides a lightweight monitoring utility that tracks request,
+model loading and inference metrics. The implementation intentionally keeps
+simple data structures (lists of dictionaries) to make it easy to analyse the
+metrics in tests and health endpoints.
 """
 
+from __future__ import annotations
+
 import time
+from datetime import datetime
+from typing import Any, Dict, List
+
 import psutil
-from collections import defaultdict, deque
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
 
 from ..core.logging_config import get_logger
 
 logger = get_logger("performance_monitor")
 
 
-class PerformanceMetrics:
-    """Container for performance metrics"""
+class PerformanceMonitor:
+    """Collects basic performance metrics for the API and model."""
 
-    def __init__(self):
-        self.request_times = deque(maxlen=1000)  # Last 1000 requests
-        self.inference_times = deque(maxlen=1000)  # Last 1000 inferences
-        self.error_count = 0
-        self.total_requests = 0
-        self.total_inferences = 0
+    def __init__(self) -> None:
+        self.request_metrics: List[Dict[str, Any]] = []
+        self.inference_metrics: List[Dict[str, Any]] = []
+        self.model_load_metrics: List[Dict[str, Any]] = []
         self.start_time = time.time()
 
-        # Endpoint-specific metrics
-        self.endpoint_metrics = defaultdict(
-            lambda: {"count": 0, "total_time": 0, "error_count": 0, "avg_time": 0}
+        # Thresholds used for alert generation
+        self._slow_request_threshold = 1.0  # seconds
+        self._cpu_threshold = 90.0
+        self._memory_threshold = 90.0
+        self._disk_threshold = 85.0
+
+    # ------------------------------------------------------------------
+    # Recording helpers
+    # ------------------------------------------------------------------
+    def record_request(self, endpoint: str, duration: float, success: bool = True) -> None:
+        self.request_metrics.append(
+            {
+                "endpoint": endpoint,
+                "duration": duration,
+                "success": success,
+                "timestamp": time.time(),
+            }
         )
 
-        # Model performance metrics
-        self.model_metrics = {
-            "load_time": None,
-            "average_inference_time": 0,
-            "fastest_inference": float("inf"),
-            "slowest_inference": 0,
-            "backend": None,
-        }
-
-    def record_request(self, endpoint: str, duration: float, success: bool = True):
-        """Record a request metric"""
-        self.total_requests += 1
-        self.request_times.append(duration)
-
-        # Update endpoint metrics
-        endpoint_data = self.endpoint_metrics[endpoint]
-        endpoint_data["count"] += 1
-        endpoint_data["total_time"] += duration
-        if not success:
-            endpoint_data["error_count"] += 1
-            self.error_count += 1
-
-        # Calculate average
-        endpoint_data["avg_time"] = endpoint_data["total_time"] / endpoint_data["count"]
-
-    def record_inference(self, duration: float, backend: str):
-        """Record an inference metric"""
-        self.total_inferences += 1
-        self.inference_times.append(duration)
-
-        # Update model metrics
-        self.model_metrics["backend"] = backend
-        self.model_metrics["average_inference_time"] = sum(self.inference_times) / len(
-            self.inference_times
+    def record_model_load(self, duration: float, backend: str) -> None:
+        self.model_load_metrics.append(
+            {
+                "duration": duration,
+                "backend": backend,
+                "timestamp": time.time(),
+            }
         )
-        self.model_metrics["fastest_inference"] = min(
-            self.model_metrics["fastest_inference"], duration
-        )
-        self.model_metrics["slowest_inference"] = max(
-            self.model_metrics["slowest_inference"], duration
-        )
-
-    def record_model_load(self, duration: float, backend: str):
-        """Record model loading time"""
-        self.model_metrics["load_time"] = duration
-        self.model_metrics["backend"] = backend
         logger.info(f"Model loaded in {duration:.2f}s using {backend} backend")
 
-    def get_system_metrics(self) -> Dict[str, Any]:
-        """Get current system performance metrics"""
-        try:
-            # CPU and memory usage
-            cpu_percent = psutil.cpu_percent(interval=1)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage("/")
-
-            return {
-                "cpu_percent": cpu_percent,
-                "memory": {
-                    "total": memory.total,
-                    "available": memory.available,
-                    "used": memory.used,
-                    "percent": memory.percent,
-                },
-                "disk": {
-                    "total": disk.total,
-                    "used": disk.used,
-                    "free": disk.free,
-                    "percent": (disk.used / disk.total) * 100,
-                },
+    def record_inference(self, duration: float, backend: str) -> None:
+        self.inference_metrics.append(
+            {
+                "duration": duration,
+                "backend": backend,
+                "timestamp": time.time(),
             }
-        except Exception as e:
-            logger.warning(f"Failed to get system metrics: {e}")
-            return {}
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get performance summary"""
-        uptime = time.time() - self.start_time
-
-        # Calculate request statistics
-        avg_request_time = (
-            sum(self.request_times) / len(self.request_times)
-            if self.request_times
-            else 0
         )
-        requests_per_second = self.total_requests / uptime if uptime > 0 else 0
-        error_rate = (
-            (self.error_count / self.total_requests) if self.total_requests > 0 else 0
-        )
+
+    # ------------------------------------------------------------------
+    # Metric summaries
+    # ------------------------------------------------------------------
+    def get_system_metrics(self) -> Dict[str, Any]:
+        """Return basic system utilisation statistics."""
+        cpu_percent = psutil.cpu_percent(interval=None)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
 
         return {
-            "uptime_seconds": uptime,
-            "total_requests": self.total_requests,
-            "total_inferences": self.total_inferences,
-            "requests_per_second": requests_per_second,
-            "average_request_time_ms": avg_request_time * 1000,
-            "error_count": self.error_count,
-            "error_rate": error_rate,
-            "endpoint_metrics": dict(self.endpoint_metrics),
-            "model_metrics": self.model_metrics,
+            "cpu_percent": cpu_percent,
+            "memory_percent": memory.percent,
+            "memory_available_gb": round(memory.available / (1024 ** 3), 2),
+            "disk_percent": disk.percent,
+            "disk_free_gb": round(disk.free / (1024 ** 3), 2),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def get_request_stats(self) -> Dict[str, Any]:
+        total = len(self.request_metrics)
+        success_count = len([m for m in self.request_metrics if m["success"]])
+        fail_count = total - success_count
+        avg = sum(m["duration"] for m in self.request_metrics) / total if total else 0
+
+        by_endpoint: Dict[str, Any] = {}
+        for m in self.request_metrics:
+            ep = m["endpoint"]
+            data = by_endpoint.setdefault(
+                ep, {"count": 0, "success_count": 0, "failure_count": 0, "total_time": 0}
+            )
+            data["count"] += 1
+            data["total_time"] += m["duration"]
+            if m["success"]:
+                data["success_count"] += 1
+            else:
+                data["failure_count"] += 1
+
+        for data in by_endpoint.values():
+            data["avg_time"] = data["total_time"] / data["count"]
+            data["success_rate"] = (
+                data["success_count"] / data["count"] if data["count"] else 0
+            )
+
+        return {
+            "total_requests": total,
+            "successful_requests": success_count,
+            "failed_requests": fail_count,
+            "success_rate": success_count / total if total else 0,
+            "avg_response_time": avg,
+            "by_endpoint": by_endpoint,
+        }
+
+    def get_inference_stats(self) -> Dict[str, Any]:
+        total = len(self.inference_metrics)
+        avg = sum(m["duration"] for m in self.inference_metrics) / total if total else 0
+        by_backend: Dict[str, Any] = {}
+        for m in self.inference_metrics:
+            backend = m["backend"]
+            data = by_backend.setdefault(backend, {"count": 0, "total_time": 0})
+            data["count"] += 1
+            data["total_time"] += m["duration"]
+
+        for data in by_backend.values():
+            data["avg_time"] = data["total_time"] / data["count"] if data["count"] else 0
+
+        return {
+            "total_inferences": total,
+            "avg_inference_time": avg,
+            "by_backend": by_backend,
+        }
+
+    def get_model_load_stats(self) -> Dict[str, Any]:
+        total = len(self.model_load_metrics)
+        avg = sum(m["duration"] for m in self.model_load_metrics) / total if total else 0
+        by_backend: Dict[str, Any] = {}
+        for m in self.model_load_metrics:
+            backend = m["backend"]
+            data = by_backend.setdefault(backend, {"count": 0, "total_time": 0})
+            data["count"] += 1
+            data["total_time"] += m["duration"]
+
+        for data in by_backend.values():
+            data["avg_time"] = data["total_time"] / data["count"] if data["count"] else 0
+
+        return {
+            "total_loads": total,
+            "avg_load_time": avg,
+            "by_backend": by_backend,
+        }
+
+    def get_performance_summary(self) -> Dict[str, Any]:
+        return {
+            "uptime_seconds": time.time() - self.start_time,
             "system_metrics": self.get_system_metrics(),
+            "request_stats": self.get_request_stats(),
+            "inference_stats": self.get_inference_stats(),
+            "model_load_stats": self.get_model_load_stats(),
         }
 
-
-class PerformanceMonitor:
-    """Service for monitoring and tracking performance metrics"""
-
-    def __init__(self):
-        self.metrics = PerformanceMetrics()
-        self.alerts = []
-
-        # Performance thresholds
-        self.thresholds = {
-            "request_time_ms": 5000,  # 5 seconds
-            "inference_time_ms": 2000,  # 2 seconds
-            "error_rate": 0.1,  # 10%
-            "cpu_percent": 90,
-            "memory_percent": 90,
-        }
-
-    def record_request(self, endpoint: str, duration: float, success: bool = True):
-        """Record request performance"""
-        self.metrics.record_request(endpoint, duration, success)
-
-        # Check for performance issues
-        self._check_request_performance(endpoint, duration, success)
-
-    def record_inference(self, duration: float, backend: str):
-        """Record inference performance"""
-        self.metrics.record_inference(duration, backend)
-
-        # Check inference performance
-        self._check_inference_performance(duration)
-
-    def record_model_load(self, duration: float, backend: str):
-        """Record model loading performance"""
-        self.metrics.record_model_load(duration, backend)
-
-    def _check_request_performance(self, endpoint: str, duration: float, success: bool):
-        """Check request performance against thresholds"""
-        duration_ms = duration * 1000
-
-        if duration_ms > self.thresholds["request_time_ms"]:
-            alert = {
-                "type": "slow_request",
-                "endpoint": endpoint,
-                "duration_ms": duration_ms,
-                "threshold_ms": self.thresholds["request_time_ms"],
-                "timestamp": datetime.now().isoformat(),
-            }
-            self.alerts.append(alert)
-            logger.warning(
-                f"Slow request detected: {endpoint} took {duration_ms:.1f}ms"
-            )
-
-        if not success:
-            logger.warning(f"Request failed: {endpoint}")
-
-    def _check_inference_performance(self, duration: float):
-        """Check inference performance against thresholds"""
-        duration_ms = duration * 1000
-
-        if duration_ms > self.thresholds["inference_time_ms"]:
-            alert = {
-                "type": "slow_inference",
-                "duration_ms": duration_ms,
-                "threshold_ms": self.thresholds["inference_time_ms"],
-                "timestamp": datetime.now().isoformat(),
-            }
-            self.alerts.append(alert)
-            logger.warning(f"Slow inference detected: {duration_ms:.1f}ms")
-
-    def check_system_health(self):
-        """Check system health metrics"""
-        try:
-            system_metrics = self.metrics.get_system_metrics()
-
-            if system_metrics:
-                cpu_percent = system_metrics.get("cpu_percent", 0)
-                memory_percent = system_metrics.get("memory", {}).get("percent", 0)
-
-                if cpu_percent > self.thresholds["cpu_percent"]:
-                    alert = {
-                        "type": "high_cpu",
-                        "cpu_percent": cpu_percent,
-                        "threshold": self.thresholds["cpu_percent"],
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                    self.alerts.append(alert)
-                    logger.warning(f"High CPU usage: {cpu_percent:.1f}%")
-
-                if memory_percent > self.thresholds["memory_percent"]:
-                    alert = {
-                        "type": "high_memory",
-                        "memory_percent": memory_percent,
-                        "threshold": self.thresholds["memory_percent"],
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                    self.alerts.append(alert)
-                    logger.warning(f"High memory usage: {memory_percent:.1f}%")
-
-        except Exception as e:
-            logger.error(f"Failed to check system health: {e}")
-
+    # Alias used by health endpoint
     def get_performance_report(self) -> Dict[str, Any]:
-        """Get comprehensive performance report"""
-        # Check system health before generating report
-        self.check_system_health()
+        return self.get_performance_summary()
 
-        summary = self.metrics.get_summary()
+    # ------------------------------------------------------------------
+    # Alerts and maintenance
+    # ------------------------------------------------------------------
+    def get_alerts(self) -> List[Dict[str, Any]]:
+        alerts: List[Dict[str, Any]] = []
+        system = self.get_system_metrics()
+        if system["cpu_percent"] > self._cpu_threshold:
+            alerts.append({"type": "high_cpu_usage", "value": system["cpu_percent"]})
+        if system["memory_percent"] > self._memory_threshold:
+            alerts.append({"type": "high_memory_usage", "value": system["memory_percent"]})
+        if system["disk_percent"] > self._disk_threshold:
+            alerts.append({"type": "high_disk_usage", "value": system["disk_percent"]})
+        if any(m["duration"] > self._slow_request_threshold for m in self.request_metrics):
+            alerts.append({"type": "slow_requests"})
+        if any(not m["success"] for m in self.request_metrics):
+            alerts.append({"type": "failed_requests"})
+        return alerts
 
-        # Add alert information
-        summary["alerts"] = {
-            "total_alerts": len(self.alerts),
-            "recent_alerts": [
-                alert
-                for alert in self.alerts
-                if datetime.fromisoformat(alert["timestamp"])
-                > datetime.now() - timedelta(minutes=30)
-            ],
-            "alert_types": {},
-        }
+    def cleanup_old_metrics(self, max_age_seconds: float = 3600) -> int:
+        cutoff = time.time() - max_age_seconds
+        before = len(self.request_metrics)
+        self.request_metrics = [m for m in self.request_metrics if m["timestamp"] >= cutoff]
+        return before - len(self.request_metrics)
 
-        # Count alert types
-        for alert in self.alerts:
-            alert_type = alert["type"]
-            if alert_type not in summary["alerts"]["alert_types"]:
-                summary["alerts"]["alert_types"][alert_type] = 0
-            summary["alerts"]["alert_types"][alert_type] += 1
-
-        # Performance recommendations
-        summary["recommendations"] = self._generate_recommendations(summary)
-
-        return summary
-
-    def _generate_recommendations(self, summary: Dict[str, Any]) -> List[str]:
-        """Generate performance recommendations based on metrics"""
-        recommendations = []
-
-        # Check average request time
-        avg_request_time_ms = summary.get("average_request_time_ms", 0)
-        if avg_request_time_ms > 1000:
-            recommendations.append(
-                "Consider optimizing request processing - average response time is high"
-            )
-
-        # Check error rate
-        error_rate = summary.get("error_rate", 0)
-        if error_rate > 0.05:  # 5%
-            recommendations.append(
-                "High error rate detected - investigate failing requests"
-            )
-
-        # Check inference performance
-        model_metrics = summary.get("model_metrics", {})
-        avg_inference_time = model_metrics.get("average_inference_time", 0)
-        if avg_inference_time > 1.0:  # 1 second
-            recommendations.append(
-                "Consider optimizing model inference - processing time is high"
-            )
-
-        # Check system resources
-        system_metrics = summary.get("system_metrics", {})
-        cpu_percent = system_metrics.get("cpu_percent", 0)
-        memory_percent = system_metrics.get("memory", {}).get("percent", 0)
-
-        if cpu_percent > 70:
-            recommendations.append(
-                "High CPU usage detected - consider scaling up or optimizing processing"
-            )
-
-        if memory_percent > 70:
-            recommendations.append(
-                "High memory usage detected - monitor for memory leaks"
-            )
-
-        return recommendations
-
-    def reset_metrics(self):
-        """Reset all metrics (useful for testing)"""
-        self.metrics = PerformanceMetrics()
-        self.alerts = []
+    def reset_metrics(self) -> None:
+        self.request_metrics.clear()
+        self.inference_metrics.clear()
+        self.model_load_metrics.clear()
+        self.start_time = time.time()
         logger.info("Performance metrics reset")
 
 
 # Global performance monitor instance
 performance_monitor = PerformanceMonitor()
+

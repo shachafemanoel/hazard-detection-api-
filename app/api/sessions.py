@@ -22,7 +22,7 @@ class SessionStartRequest(BaseModel):
 
 
 @router.post("/start")
-async def start_session(session_config: SessionStartRequest = None) -> Dict[str, str]:
+async def start_session(session_config: SessionStartRequest = None) -> Dict[str, Any]:
     """Start a new detection session with optional configuration"""
     try:
         # Create session with optional configuration
@@ -39,7 +39,7 @@ async def start_session(session_config: SessionStartRequest = None) -> Dict[str,
         return {
             "session_id": session_id,
             "confidence_threshold": session_config.confidence_threshold if session_config else 0.5,
-            "status": "created"
+            "status": "created",
         }
     except Exception as e:
         logger.error(f"Failed to start session: {e}")
