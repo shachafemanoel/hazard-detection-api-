@@ -277,7 +277,7 @@ def test_detect_best0408_openvino_model(
             "Wheel Mark Crack",
         ],
         "class_count": 10,
-        "input_shape": [1, 3, 512, 512],
+        "input_shape": [1, 3, 480, 480],
         "output_shape": [1, 25200, 15],
         "device": "AUTO",
         "performance_mode": "LATENCY",
