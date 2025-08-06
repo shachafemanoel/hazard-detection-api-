@@ -33,11 +33,11 @@ def test_image():
     """Create a test image"""
     # Create a simple 640x640 RGB test image
     img_array = np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
-    img = Image.fromarray(img_array, 'RGB')
-    
+    img = Image.fromarray(img_array, "RGB")
+
     # Convert to bytes
     buffer = BytesIO()
-    img.save(buffer, format='JPEG')
+    img.save(buffer, format="JPEG")
     buffer.seek(0)
     return buffer
 
@@ -47,11 +47,11 @@ def test_image_small():
     """Create a small test image for faster tests"""
     # Create a simple 10x10 RGB test image
     img_array = np.zeros((10, 10, 3), dtype=np.uint8)
-    img = Image.fromarray(img_array, 'RGB')
-    
+    img = Image.fromarray(img_array, "RGB")
+
     # Convert to bytes
     buffer = BytesIO()
-    img.save(buffer, format='JPEG')
+    img.save(buffer, format="JPEG")
     buffer.seek(0)
     return buffer
 
@@ -61,17 +61,14 @@ def mock_detection_results():
     """Mock detection results"""
     return [
         DetectionResult(
-            bbox=[100, 100, 200, 200],
-            confidence=0.85,
-            class_id=0,
-            class_name="Pothole"
+            bbox=[100, 100, 200, 200], confidence=0.85, class_id=0, class_name="Pothole"
         ),
         DetectionResult(
             bbox=[300, 300, 400, 400],
             confidence=0.75,
             class_id=1,
-            class_name="Alligator Crack"
-        )
+            class_name="Alligator Crack",
+        ),
     ]
 
 
@@ -87,7 +84,7 @@ def mock_model_service():
         "status": "loaded",
         "backend": "pytorch",
         "classes": ["Pothole", "Alligator Crack"],
-        "class_count": 2
+        "class_count": 2,
     }
     return mock
 
@@ -111,9 +108,9 @@ def reset_model_service():
     original_is_loaded = model_service.is_loaded
     original_backend = model_service.backend
     original_model = model_service.model
-    
+
     yield
-    
+
     # Restore original state
     model_service.is_loaded = original_is_loaded
     model_service.backend = original_backend
@@ -128,11 +125,11 @@ def sample_session_id(clean_session_service):
 
 class MockOpenVinoModel:
     """Mock OpenVINO model for testing"""
-    
+
     def __init__(self):
         self.input_shape = [1, 3, 512, 512]
         self.output_shape = [1, 25200, 15]  # YOLO output format
-    
+
     def predict(self, image):
         # Mock prediction returning random detections
         predictions = np.random.rand(1, 100, 15)  # Mock YOLO format

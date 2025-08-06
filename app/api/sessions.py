@@ -23,7 +23,9 @@ async def start_session() -> Dict[str, str]:
         return {"session_id": session_id}
     except Exception as e:
         logger.error(f"Failed to start session: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start session: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start session: {str(e)}"
+        )
 
 
 @router.post("/{session_id}/end")
@@ -52,7 +54,9 @@ async def get_session_summary(session_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to get session summary {session_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get session summary: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get session summary: {str(e)}"
+        )
 
 
 @router.post("/{session_id}/report/{report_id}/confirm")
@@ -66,7 +70,9 @@ async def confirm_report(session_id: str, report_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to confirm report {report_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to confirm report: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to confirm report: {str(e)}"
+        )
 
 
 @router.post("/{session_id}/report/{report_id}/dismiss")
@@ -80,4 +86,6 @@ async def dismiss_report(session_id: str, report_id: str) -> Dict[str, str]:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to dismiss report {report_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to dismiss report: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to dismiss report: {str(e)}"
+        )

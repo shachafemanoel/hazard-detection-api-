@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api", tags=["external"])
 # For now, we'll create placeholder endpoints that use the mock implementations
 # These can be enhanced later when the actual external services are integrated
 
+
 @router.get("/health")
 async def api_health_check():
     """Check health of all external API services"""
@@ -25,31 +26,22 @@ async def api_health_check():
             "services": {
                 "google_maps": {
                     "status": "disabled",
-                    "message": "API key not configured"
+                    "message": "API key not configured",
                 },
-                "redis": {
-                    "status": "disabled", 
-                    "message": "Redis not available"
-                },
+                "redis": {"status": "disabled", "message": "Redis not available"},
                 "cloudinary": {
                     "status": "disabled",
-                    "message": "Credentials not configured"
+                    "message": "Credentials not configured",
                 },
-                "render": {
-                    "status": "disabled",
-                    "message": "API key not configured"
-                },
-                "railway": {
-                    "status": "disabled",
-                    "message": "Token not configured"
-                }
-            }
+                "render": {"status": "disabled", "message": "API key not configured"},
+                "railway": {"status": "disabled", "message": "Token not configured"},
+            },
         }
-        
+
         return {
             "success": True,
             "services": health_status,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
         logger.error(f"API health check failed: {e}")
@@ -57,19 +49,21 @@ async def api_health_check():
 
 
 @router.post("/geocode")
-async def geocode_address_endpoint(address: str = Query(..., description="Address to geocode")):
+async def geocode_address_endpoint(
+    address: str = Query(..., description="Address to geocode")
+):
     """Geocode an address to coordinates"""
     try:
         # Mock geocoding response
         mock_response = {
             "success": False,
             "error": "Geocoding service not configured. Set up Google Maps API or external geocoding service.",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         # Return mock response with appropriate status
         raise HTTPException(status_code=503, detail=mock_response["error"])
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -80,7 +74,7 @@ async def geocode_address_endpoint(address: str = Query(..., description="Addres
 @router.post("/reverse-geocode")
 async def reverse_geocode_endpoint(
     lat: float = Query(..., description="Latitude"),
-    lng: float = Query(..., description="Longitude")
+    lng: float = Query(..., description="Longitude"),
 ):
     """Reverse geocode coordinates to address"""
     try:
@@ -88,23 +82,25 @@ async def reverse_geocode_endpoint(
         mock_response = {
             "success": False,
             "error": "Reverse geocoding service not configured. Set up Google Maps API or external geocoding service.",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         # Return mock response with appropriate status
         raise HTTPException(status_code=503, detail=mock_response["error"])
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Reverse geocoding failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Reverse geocoding failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Reverse geocoding failed: {str(e)}"
+        )
 
 
 @router.post("/cache-detection")
 async def cache_detection_endpoint(
     detection_id: str = Query(..., description="Detection ID to cache"),
-    detection_data: Dict[str, Any] = None
+    detection_data: Dict[str, Any] = None,
 ):
     """Cache detection result"""
     try:
@@ -112,12 +108,12 @@ async def cache_detection_endpoint(
         mock_response = {
             "success": False,
             "error": "Caching service not configured. Set up Redis or external caching service.",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         # Return mock response with appropriate status
         raise HTTPException(status_code=503, detail=mock_response["error"])
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -133,12 +129,12 @@ async def render_status():
         mock_response = {
             "success": False,
             "error": "Render service not configured. Set up Render API key.",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         # Return mock response with appropriate status
         raise HTTPException(status_code=503, detail=mock_response["error"])
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -154,12 +150,12 @@ async def railway_status():
         mock_response = {
             "success": False,
             "error": "Railway service not configured. Set up Railway token.",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
-        
+
         # Return mock response with appropriate status
         raise HTTPException(status_code=503, detail=mock_response["error"])
-        
+
     except HTTPException:
         raise
     except Exception as e:

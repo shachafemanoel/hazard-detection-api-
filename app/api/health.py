@@ -32,7 +32,7 @@ async def root():
         "service": settings.app_name.lower().replace(" ", "-"),
         "version": settings.app_version,
         "message": "FastAPI service is running",
-        "endpoints": ["/health", "/status", "/session/start", "/detect"]
+        "endpoints": ["/health", "/status", "/session/start", "/detect"],
     }
 
 
@@ -42,7 +42,7 @@ async def get_detailed_status():
     try:
         # Model status information
         model_info = model_service.get_model_info()
-        
+
         if model_info["status"] == "loaded":
             model_status = f"loaded_{model_info['backend']}"
             backend_inference = True
@@ -51,7 +51,7 @@ async def get_detailed_status():
             model_status = "loading"
             backend_inference = False
             backend_type = "auto"
-        
+
         # Environment information
         env_info = {
             "platform": platform.system(),
@@ -60,18 +60,19 @@ async def get_detailed_status():
             "deployment_env": settings.environment,
             "port": str(settings.port),
             "cors_enabled": True,
-            "mobile_friendly": True
+            "mobile_friendly": True,
         }
-        
+
         # Model file information
         model_files_info = {
-            "openvino_model": str(settings.model_dir) + "/best0408_openvino_model/best0408.xml",
+            "openvino_model": str(settings.model_dir)
+            + "/best0408_openvino_model/best0408.xml",
             "pytorch_model": str(settings.model_dir) + "/best.pt",
             "current_backend": backend_type,
             "model_classes": len(model_info.get("classes", [])),
-            "input_size": settings.model_input_size
+            "input_size": settings.model_input_size,
         }
-        
+
         # API endpoints
         endpoints_info = {
             "health": "/health",
@@ -81,7 +82,7 @@ async def get_detailed_status():
             "legacy_detect": "/detect",
             "batch_detect": "/detect-batch",
         }
-        
+
         return {
             "status": "healthy",
             "model_status": model_status,
@@ -97,10 +98,10 @@ async def get_detailed_status():
                 "iou_threshold": settings.iou_threshold,
                 "tracking_enabled": True,
                 "openvino_device": settings.openvino_device,
-                "performance_mode": settings.openvino_performance_mode
-            }
+                "performance_mode": settings.openvino_performance_mode,
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Status check error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
@@ -114,7 +115,7 @@ async def get_performance_metrics():
         return {
             "success": True,
             "timestamp": __import__("datetime").datetime.now().isoformat(),
-            "performance": report
+            "performance": report,
         }
     except Exception as e:
         logger.error(f"Failed to get performance metrics: {e}")
