@@ -2,8 +2,9 @@
 Session management API endpoints
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from ..core.logging_config import get_logger
 from ..core.exceptions import SessionNotFoundException
@@ -14,13 +15,32 @@ logger = get_logger("sessions_api")
 router = APIRouter(prefix="/session", tags=["sessions"])
 
 
+class SessionStartRequest(BaseModel):
+    confidence_threshold: Optional[float] = 0.5
+    source: Optional[str] = "web_app"
+    user_id: Optional[str] = None
+
+
 @router.post("/start")
-async def start_session() -> Dict[str, str]:
-    """Start a new detection session"""
+async def start_session(session_config: SessionStartRequest = None) -> Dict[str, str]:
+    """Start a new detection session with optional configuration"""
     try:
-        session_id = session_service.create_session()
-        logger.info(f"Started new session: {session_id}")
-        return {"session_id": session_id}
+        # Create session with optional configuration
+        session_metadata = {}
+        if session_config:
+            session_metadata = {
+                "confidence_threshold": session_config.confidence_threshold,
+                "source": session_config.source,
+                "user_id": session_config.user_id
+            }
+        
+        session_id = session_service.create_session(metadata=session_metadata)
+        logger.info(f"Started new session: {session_id} with config: {session_metadata}")
+        return {
+            "session_id": session_id,
+            "confidence_threshold": session_config.confidence_threshold if session_config else 0.5,
+            "status": "created"
+        }
     except Exception as e:
         logger.error(f"Failed to start session: {e}")
         raise HTTPException(

@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "hazard-detection-api-",
+			"path": "."
+		},
+		{
+			"name": "best0408_openvino_model",
+			"path": "../../../Downloads/model_package/best0408_openvino_model"
+		}
+	],
+	"settings": {}
+}
