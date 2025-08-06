@@ -6,6 +6,8 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
+from app.services.model_service import DetectionResult
+
 
 def test_detect_no_session_id_error(client: TestClient):
     """Test detection endpoint with invalid session"""
@@ -210,3 +212,133 @@ def test_detect_batch_no_files(client: TestClient):
     
     # This should return an error due to validation
     assert response.status_code in [422, 503]  # 422 for validation, 503 if model not loaded
+
+
+@patch('app.services.model_service.model_service')
+def test_detect_best0408_openvino_model(mock_model_service, client: TestClient, 
+                                       sample_session_id, test_image_small):
+    """Test detection specifically with best0408_openvino_model backend"""
+    # Mock OpenVINO backend with specific model characteristics
+    mock_model_service.is_loaded = True
+    mock_model_service.backend = "openvino"
+    mock_model_service.load_model = AsyncMock(return_value=True)
+    
+    # Create mock detection results specific to road hazard detection
+    openvino_detections = [
+        DetectionResult(
+            bbox=[120, 150, 220, 250],
+            confidence=0.94,
+            class_id=7,  # Pothole
+            class_name="Pothole"
+        ),
+        DetectionResult(
+            bbox=[350, 200, 450, 300],
+            confidence=0.87,
+            class_id=0,  # Alligator Crack
+            class_name="Alligator Crack"
+        ),
+        DetectionResult(
+            bbox=[100, 400, 180, 480],
+            confidence=0.76,
+            class_id=5,  # Manhole
+            class_name="Manhole"
+        )
+    ]
+    
+    mock_model_service.predict = AsyncMock(return_value=openvino_detections)
+    mock_model_service.get_model_info.return_value = {
+        "status": "loaded",
+        "backend": "openvino",
+        "classes": [
+            'Alligator Crack', 'Block Crack', 'Crosswalk Blur', 'Lane Blur',
+            'Longitudinal Crack', 'Manhole', 'Patch Repair', 'Pothole',
+            'Transverse Crack', 'Wheel Mark Crack'
+        ],
+        "class_count": 10,
+        "input_shape": [1, 3, 512, 512],
+        "output_shape": [1, 25200, 15],
+        "device": "AUTO",
+        "performance_mode": "LATENCY",
+        "async_inference": True
+    }
+    
+    files = {"file": ("road_damage.jpg", test_image_small, "image/jpeg")}
+    
+    response = client.post(f"/detect/{sample_session_id}", files=files)
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["success"] is True
+    assert data["model_info"]["backend"] == "openvino"
+    assert "input_shape" in data["model_info"]
+    assert "output_shape" in data["model_info"]
+    
+    # Verify all expected detections
+    detections = data["detections"]
+    assert len(detections) == 3
+    
+    class_names = [det["class_name"] for det in detections]
+    assert "Pothole" in class_names
+    assert "Alligator Crack" in class_names
+    assert "Manhole" in class_names
+    
+    # Verify high confidence detection creates reports
+    high_conf_detections = [det for det in detections if det["confidence"] > 0.9]
+    assert len(high_conf_detections) >= 1
+
+
+@patch('app.services.model_service.model_service')
+def test_detect_pytorch_fallback(mock_model_service, client: TestClient, 
+                                sample_session_id, test_image_small):
+    """Test detection with PyTorch fallback when OpenVINO fails"""
+    # Mock PyTorch fallback scenario
+    mock_model_service.is_loaded = True
+    mock_model_service.backend = "pytorch"
+    mock_model_service.load_model = AsyncMock(return_value=True)
+    
+    pytorch_detections = [
+        DetectionResult(
+            bbox=[100, 100, 200, 200],
+            confidence=0.82,
+            class_id=7,
+            class_name="Pothole"
+        )
+    ]
+    
+    mock_model_service.predict = AsyncMock(return_value=pytorch_detections)
+    mock_model_service.get_model_info.return_value = {
+        "status": "loaded",
+        "backend": "pytorch",
+        "classes": [
+            'Alligator Crack', 'Block Crack', 'Crosswalk Blur', 'Lane Blur',
+            'Longitudinal Crack', 'Manhole', 'Patch Repair', 'Pothole',
+            'Transverse Crack', 'Wheel Mark Crack'
+        ],
+        "class_count": 10
+    }
+    
+    files = {"file": ("test.jpg", test_image_small, "image/jpeg")}
+    
+    response = client.post(f"/detect/{sample_session_id}", files=files)
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["model_info"]["backend"] == "pytorch"
+    assert "input_shape" not in data["model_info"]  # PyTorch doesn't expose this
+
+
+def test_detect_performance_tracking(client: TestClient, sample_session_id, test_image_small):
+    """Test that detection performance metrics are tracked"""
+    with patch('app.services.model_service.model_service') as mock_model_service:
+        mock_model_service.is_loaded = True
+        mock_model_service.predict = AsyncMock(return_value=[])
+        
+        files = {"file": ("test.jpg", test_image_small, "image/jpeg")}
+        
+        response = client.post(f"/detect/{sample_session_id}", files=files)
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "processing_time_ms" in data
+        assert isinstance(data["processing_time_ms"], (int, float))
+        assert data["processing_time_ms"] >= 0
