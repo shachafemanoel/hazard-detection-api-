@@ -62,9 +62,10 @@ class DetectionReport:
 class DetectionSession:
     """Represents a detection session"""
 
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, metadata: Optional[Dict[str, Any]] = None):
         self.id = session_id
         self.start_time = datetime.now().isoformat()
+        self.metadata = metadata or {}
         self.reports: List[DetectionReport] = []
         self.detection_count = 0
         self.unique_hazards = 0
@@ -100,10 +101,10 @@ class SessionService:
         self.sessions: Dict[str, DetectionSession] = {}
         self.active_detections: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
-    def create_session(self) -> str:
+    def create_session(self, metadata: Optional[Dict[str, Any]] = None) -> str:
         """Create a new detection session"""
         session_id = str(uuid.uuid4())
-        session = DetectionSession(session_id)
+        session = DetectionSession(session_id, metadata)
         self.sessions[session_id] = session
         self.active_detections[session_id] = []
 
