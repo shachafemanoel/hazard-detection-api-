@@ -6,7 +6,7 @@ This comprehensive guide shows you how to interact with the Hazard Detection API
 
 ```javascript
 // Production (Railway) - default
-const API_BASE_URL = process.env.HAZARD_API_URL || "https://hazard-api-production-production.up.railway.app:8000";
+const API_BASE_URL = process.env.HAZARD_API_URL || "https://hazard-api-production-production.up.railway.app";
 
 // Local Development
 // const API_BASE_URL = "http://localhost:8080";
@@ -38,7 +38,7 @@ const checkHealth = async () => {
 
 ```bash
 # cURL Example
-curl -X GET "https://hazard-api-production-production.up.railway.app:8000/health"
+curl -X GET "https://hazard-api-production-production.up.railway.app/health"
 ```
 
 **Response:**
@@ -81,7 +81,7 @@ const startSession = async () => {
 ```
 
 ```bash
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/session/start" \
+curl -X POST "https://hazard-api-production-production.up.railway.app/session/start" \
   -H "Content-Type: application/json"
 ```
 
@@ -130,7 +130,7 @@ const detectHazards = async (sessionId, imageFile) => {
 ```
 
 ```bash
-curl -X POST "https://hazard-api-production-production.up.railway.app:8000/" \
+curl -X POST "https://hazard-api-production-production.up.railway.app/detect/$SESSION_ID" \
   -F "file=@road_image.jpg"
 ```
 
@@ -311,7 +311,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 
 class HazardDetectionClient {
-  constructor(baseUrl = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app:8000') {
+  constructor(baseUrl = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app') {
     this.baseUrl = baseUrl;
     this.sessionId = null;
   }
@@ -440,7 +440,7 @@ from typing import List, Dict, Optional
 
 class HazardDetectionClient:
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or os.getenv("HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app:8000")
+        self.base_url = base_url or os.getenv("HAZARD_API_URL", "https://hazard-api-production-production.up.railway.app")
         self.session_id = None
     
     async def start_session(self) -> str:
@@ -497,7 +497,7 @@ class HazardDetectionClient:
 
 # Usage example
 async def process_road_images(image_paths: List[str]):
-    client = HazardDetectionClient("https://hazard-api-production-production.up.railway.app:8000")
+    client = HazardDetectionClient("https://hazard-api-production-production.up.railway.app")
     
     try:
         # Check health
