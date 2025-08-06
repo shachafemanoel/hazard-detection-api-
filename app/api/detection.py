@@ -65,16 +65,39 @@ async def detect_hazards_with_session(
             image = Image.open(image_stream)
             # Ensure RGB format for consistent processing
             if image.mode != 'RGB':
+                logger.info(f"Converting image from {image.mode} to RGB")
                 image = image.convert("RGB")
                 
             # Validate image dimensions
             if image.width == 0 or image.height == 0:
                 raise InvalidImageException("Image has invalid dimensions")
                 
+            # Additional validation for common issues
+            if image.width > 8192 or image.height > 8192:
+                logger.warning(f"Large image detected: {image.size}. Resizing for processing.")
+                # Resize very large images to prevent memory issues
+                max_size = 4096
+                if image.width > max_size or image.height > max_size:
+                    ratio = min(max_size / image.width, max_size / image.height)
+                    new_size = (int(image.width * ratio), int(image.height * ratio))
+                    image = image.resize(new_size, Image.Resampling.LANCZOS)
+                
             logger.info(f"Image processed: {image.size} {image.mode}")
                 
+        except InvalidImageException:
+            raise  # Re-raise our custom exceptions
         except Exception as e:
-            raise InvalidImageException(f"Failed to process image: {str(e)}")
+            logger.error(f"Image processing error: {e}")
+            # Try alternative loading method
+            try:
+                image_stream.seek(0)
+                image = Image.open(image_stream)
+                image.load()  # Force load the image data
+                if image.mode != 'RGB':
+                    image = image.convert("RGB")
+                logger.info(f"Alternative loading successful: {image.size} {image.mode}")
+            except Exception as e2:
+                raise InvalidImageException(f"Failed to process image with both methods: {str(e)} | {str(e2)}")
 
         # Store original image data for reports (base64 encoded)
         image_base64 = base64.b64encode(contents).decode("utf-8")
@@ -138,9 +161,32 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
         try:
             image_data = base64.b64decode(detection_request.image)
             image_stream = BytesIO(image_data)
-            image = Image.open(image_stream).convert("RGB")
+            image_stream.seek(0)
+            
+            image = Image.open(image_stream)
+            if image.mode != 'RGB':
+                logger.info(f"Converting base64 image from {image.mode} to RGB")
+                image = image.convert("RGB")
+                
+            # Validate dimensions
+            if image.width == 0 or image.height == 0:
+                raise InvalidImageException("Base64 image has invalid dimensions")
+                
+            logger.info(f"Base64 image processed: {image.size} {image.mode}")
+            
+        except InvalidImageException:
+            raise  # Re-raise our custom exceptions
         except Exception as e:
-            raise InvalidImageException(f"Failed to decode base64 image: {str(e)}")
+            logger.error(f"Base64 image processing error: {e}")
+            try:
+                # Try alternative decoding
+                image_stream.seek(0)
+                image = Image.open(image_stream)
+                image.load()
+                image = image.convert("RGB")
+                logger.info(f"Alternative base64 decoding successful: {image.size} {image.mode}")
+            except Exception as e2:
+                raise InvalidImageException(f"Failed to decode base64 image with both methods: {str(e)} | {str(e2)}")
 
         # Run model inference
         detections = await ms.predict(image)
