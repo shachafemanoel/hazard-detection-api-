@@ -69,7 +69,7 @@ class Detection(BaseModel):
 class ImageSize(BaseModel):
     """Image dimensions"""
 
-    width: int = Field(..., example=640)
+    width: int = Field(..., example=480)
     height: int = Field(..., example=480)
 
 
@@ -82,7 +82,7 @@ class ModelInfo(BaseModel):
     class_count: int = Field(..., example=10)
     confidence_threshold: Optional[float] = Field(None, example=0.6)
     tracking_enabled: Optional[bool] = Field(None, example=True)
-    input_shape: Optional[List[int]] = Field(None, example=[1, 3, 512, 512])
+    input_shape: Optional[List[int]] = Field(None, example=[1, 3, 480, 480])
     output_shape: Optional[List[int]] = Field(None, example=[1, 25200, 15])
     device: Optional[str] = Field(None, example="AUTO")
     performance_mode: Optional[str] = Field(None, example="LATENCY")
@@ -224,7 +224,7 @@ class DeviceInfo(BaseModel):
     """Device information"""
 
     device: Optional[str] = Field(None, example="AUTO")
-    input_shape: Optional[List[int]] = Field(None, example=[1, 3, 512, 512])
+    input_shape: Optional[List[int]] = Field(None, example=[1, 3, 480, 480])
     output_shape: Optional[List[int]] = Field(None, example=[1, 25200, 15])
     model_path: Optional[str] = Field(
         None, example="best0408_openvino_model/best0408.xml"
@@ -257,7 +257,7 @@ class ModelFiles(BaseModel):
     pytorch_model: str = Field(..., example="/app/best.pt")
     current_backend: str = Field(..., example="openvino")
     model_classes: int = Field(..., example=10)
-    input_size: int = Field(..., example=512)
+    input_size: int = Field(..., example=480)
 
 
 class ConfigurationInfo(BaseModel):

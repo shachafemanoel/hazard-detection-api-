@@ -31,8 +31,8 @@ def client():
 @pytest.fixture
 def test_image():
     """Create a test image"""
-    # Create a simple 640x640 RGB test image
-    img_array = np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
+    # Create a simple 480x480 RGB test image
+    img_array = np.random.randint(0, 255, (480, 480, 3), dtype=np.uint8)
     img = Image.fromarray(img_array, "RGB")
 
     # Convert to bytes
@@ -127,7 +127,7 @@ class MockOpenVinoModel:
     """Mock OpenVINO model for testing"""
 
     def __init__(self):
-        self.input_shape = [1, 3, 512, 512]
+        self.input_shape = [1, 3, 480, 480]
         self.output_shape = [1, 25200, 15]  # YOLO output format
 
     def predict(self, image):
@@ -144,7 +144,7 @@ def mock_openvino_model():
 
 
 # Test data constants
-TEST_IMAGE_WIDTH = 640
-TEST_IMAGE_HEIGHT = 640
+TEST_IMAGE_WIDTH = 480
+TEST_IMAGE_HEIGHT = 480
 TEST_CONFIDENCE_THRESHOLD = 0.5
 TEST_IOU_THRESHOLD = 0.45
