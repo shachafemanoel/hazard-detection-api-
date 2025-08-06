@@ -3,8 +3,13 @@ Session management API endpoints
 """
 
 from typing import Dict, Any, Optional
+import base64
+from io import BytesIO
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from PIL import Image, ImageDraw, ImageFont
 
 from ..core.logging_config import get_logger
 from ..core.exceptions import SessionNotFoundException
@@ -109,3 +114,70 @@ async def dismiss_report(session_id: str, report_id: str) -> Dict[str, str]:
         raise HTTPException(
             status_code=500, detail=f"Failed to dismiss report: {str(e)}"
         )
+
+
+@router.get("/{session_id}/report/{report_id}/image")
+async def get_report_image(session_id: str, report_id: str):
+    """Retrieve original image for a detection report"""
+    try:
+        session = session_service.get_session(session_id)
+    except SessionNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    for report in session.reports:
+        if report.report_id == report_id:
+            if not report.image_data:
+                raise HTTPException(
+                    status_code=404, detail="Image not available for this report"
+                )
+            try:
+                image_bytes = base64.b64decode(report.image_data)
+            except Exception:
+                raise HTTPException(status_code=500, detail="Failed to decode image")
+            return StreamingResponse(BytesIO(image_bytes), media_type="image/jpeg")
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Report {report_id} not found in session {session_id}",
+    )
+
+
+@router.get("/{session_id}/report/{report_id}/plot")
+async def get_report_plot(session_id: str, report_id: str):
+    """Get model response plot for a detection report"""
+    try:
+        session = session_service.get_session(session_id)
+    except SessionNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    for report in session.reports:
+        if report.report_id == report_id:
+            if not report.image_data:
+                raise HTTPException(
+                    status_code=404, detail="Image not available for this report"
+                )
+            try:
+                image_bytes = base64.b64decode(report.image_data)
+                image = Image.open(BytesIO(image_bytes)).convert("RGB")
+            except Exception:
+                raise HTTPException(status_code=500, detail="Failed to decode image")
+
+            draw = ImageDraw.Draw(image)
+            bbox = report.detection.bbox
+            draw.rectangle(bbox, outline="red", width=2)
+            label = f"{report.detection.class_name} {report.detection.confidence:.2f}"
+            try:
+                font = ImageFont.load_default()
+            except Exception:
+                font = None
+            draw.text((bbox[0], max(0, bbox[1] - 10)), label, fill="red", font=font)
+
+            buffer = BytesIO()
+            image.save(buffer, format="JPEG")
+            buffer.seek(0)
+            return StreamingResponse(buffer, media_type="image/jpeg")
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Report {report_id} not found in session {session_id}",
+    )
