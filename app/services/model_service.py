@@ -471,7 +471,7 @@ class ModelService:
                 # Convert back to RGB
                 letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
                 
-                logger.debug("OpenCV image processing successful")
+                logger.info("OpenCV image processing successful")
                 
             except Exception as e:
                 logger.warning(f"OpenCV processing failed ({e}), falling back to PIL")
