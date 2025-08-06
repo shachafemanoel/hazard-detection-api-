@@ -146,7 +146,7 @@ from typing import List, Dict, Optional
 
 class HazardDetectionClient:
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or os.getenv('HAZARD_API_URL', 'http://localhost:8000')
+        self.base_url = base_url or os.getenv('HAZARD_API_URL', 'http://localhost:8080')
         self.session_id = None
     
     async def start_session(self) -> str:
@@ -227,7 +227,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 
 class HazardDetectionClient {
-    constructor(baseUrl = process.env.HAZARD_API_URL || 'http://localhost:8000') {
+    constructor(baseUrl = process.env.HAZARD_API_URL || 'http://localhost:8080') {
         this.baseUrl = baseUrl;
         this.sessionId = null;
     }
@@ -439,7 +439,7 @@ If both services are on Railway, you can use internal networking:
 
 ```python
 # Use Railway's internal URL for faster communication
-INTERNAL_API_URL = f"http://{os.getenv('RAILWAY_SERVICE_NAME', 'hazard-detection-api')}:8000"
+INTERNAL_API_URL = f"http://{os.getenv('RAILWAY_SERVICE_NAME', 'hazard-detection-api')}:8080"
 ```
 
 ### Load Balancing & Scaling

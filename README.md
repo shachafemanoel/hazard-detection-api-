@@ -122,9 +122,12 @@ python main.py
 ```
 
 4. **Access Documentation**
-- API: http://localhost:8080
-- Interactive Docs: http://localhost:8080/docs
-- Performance Metrics: http://localhost:8080/metrics
+- Production API: https://hazard-api-production-production.up.railway.app
+- Interactive Docs: https://hazard-api-production-production.up.railway.app/docs
+- Performance Metrics: https://hazard-api-production-production.up.railway.app/metrics
+- Local API: http://localhost:8080
+- Local Docs: http://localhost:8080/docs
+- Local Metrics: http://localhost:8080/metrics
 
 ## ⚙️ Configuration
 
