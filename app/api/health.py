@@ -4,7 +4,7 @@ Health check and status API endpoints
 
 import platform
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
@@ -22,6 +22,12 @@ router = APIRouter(prefix="", tags=["health"])
 async def health_check():
     """Simple health check endpoint"""
     return {"status": "healthy"}
+
+
+@router.options("/health", include_in_schema=False)
+async def health_options() -> Response:
+    """Handle OPTIONS requests for health checks"""
+    return Response(status_code=200)
 
 
 @router.get("/")
