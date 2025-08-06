@@ -431,7 +431,14 @@ class ModelService:
 
         if cv2 is not None:
             # Use OpenCV for better performance
-            img_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            # Ensure image is properly converted to numpy array
+            img_array = np.array(image)
+            if len(img_array.shape) != 3 or img_array.shape[2] != 3:
+                # Force RGB conversion if image format is unexpected
+                image = image.convert("RGB")
+                img_array = np.array(image)
+            
+            img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
             original_height, original_width = img_cv.shape[:2]
 
             # Calculate letterbox scale
