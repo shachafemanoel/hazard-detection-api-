@@ -100,7 +100,7 @@ class TestModelService:
         mock_model.outputs = [mock_output_layer]
         mock_input_layer.partial_shape.is_dynamic = False
         mock_output_layer.partial_shape.is_dynamic = False
-        mock_input_layer.shape = [1, 3, 512, 512]
+        mock_input_layer.shape = [1, 3, 480, 480]
         mock_output_layer.shape = [1, 25200, 15]
 
         mock_compiled_model.input.return_value = mock_input_layer
@@ -183,7 +183,7 @@ class TestModelService:
         mock_model.predict.return_value = [mock_result]
         service.model = mock_model
 
-        test_image = Image.new("RGB", (640, 640))
+        test_image = Image.new("RGB", (480, 480))
 
         with patch("app.services.model_service.model_config") as mock_config:
             mock_config.class_names = [
@@ -265,7 +265,7 @@ class TestModelService:
         # Mock OpenVINO components
         mock_input_layer = MagicMock()
         mock_output_layer = MagicMock()
-        mock_input_layer.shape = [1, 3, 512, 512]
+        mock_input_layer.shape = [1, 3, 480, 480]
         mock_output_layer.shape = [1, 25200, 15]
         service.input_layer = mock_input_layer
         service.output_layer = mock_output_layer
@@ -283,7 +283,7 @@ class TestModelService:
 
         assert info["status"] == "loaded"
         assert info["backend"] == "openvino"
-        assert info["input_shape"] == [1, 3, 512, 512]
+        assert info["input_shape"] == [1, 3, 480, 480]
         assert info["output_shape"] == [1, 25200, 15]
         assert info["device"] == "AUTO"
         assert info["performance_mode"] == "LATENCY"
