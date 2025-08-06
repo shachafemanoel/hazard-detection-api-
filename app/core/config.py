@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     model_backend: Literal["auto", "openvino", "pytorch"] = Field(
         default="auto", env="MODEL_BACKEND"
     )
-    model_input_size: int = Field(default=512, env="MODEL_INPUT_SIZE")
+    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")
 
     # OpenVINO settings
     openvino_device: str = Field(default="AUTO", env="OPENVINO_DEVICE")

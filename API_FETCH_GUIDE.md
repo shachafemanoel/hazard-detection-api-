@@ -621,7 +621,7 @@ processBatchWithProgress(imageFiles, (progress) => {
       "Longitudinal Crack", "Manhole", "Patch Repair", "Pothole",
       "Transverse Crack", "Wheel Mark Crack"
     ],
-    "input_size": 512
+    "input_size": 480
   }
 }
 ```
