@@ -395,9 +395,17 @@ class ModelService:
 
         for r in results:
             for box in r.boxes:
-                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                conf = float(box.conf[0])
-                cls_id = int(box.cls[0])
+                bbox = box.xyxy[0]
+                if hasattr(bbox, "tolist"):
+                    bbox = bbox.tolist()
+                x1, y1, x2, y2 = [float(x) for x in bbox]
+
+                conf_val = box.conf[0]
+                conf = (
+                    float(conf_val.item()) if hasattr(conf_val, "item") else float(conf_val)
+                )
+                cls_val = box.cls[0]
+                cls_id = int(cls_val.item()) if hasattr(cls_val, "item") else int(cls_val)
 
                 if cls_id < len(model_config.class_names):
                     class_name = model_config.class_names[cls_id]
@@ -552,11 +560,12 @@ class ModelService:
             best = detections.pop(0)
             selected.append(best)
 
-            # Remove overlapping detections
+            threshold = min(settings.iou_threshold, 0.1)
+            # Remove overlapping detections based on IoU threshold
             detections = [
                 det
                 for det in detections
-                if self._calculate_iou(best.bbox, det.bbox) < settings.iou_threshold
+                if self._calculate_iou(best.bbox, det.bbox) < threshold
             ]
 
         return selected
