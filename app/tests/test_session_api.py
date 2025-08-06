@@ -4,7 +4,11 @@ Tests for session management API endpoints
 
 import pytest
 import uuid
+import base64
 from fastapi.testclient import TestClient
+
+from app.services.session_service import session_service, DetectionReport
+from app.services.model_service import DetectionResult
 
 
 def test_start_session(client: TestClient, clean_session_service):
@@ -134,3 +138,32 @@ def test_multiple_sessions(client: TestClient, clean_session_service):
     assert summary2.status_code == 200
     assert summary1.json()["id"] == session_id1
     assert summary2.json()["id"] == session_id2
+
+
+def test_get_report_image_and_plot(
+    client: TestClient, sample_session_id, test_image_small
+):
+    """Test fetching report image and plot endpoints"""
+    # Prepare a report with image data
+    image_bytes = test_image_small.getvalue()
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    detection = DetectionResult(
+        bbox=[0, 0, 5, 5], confidence=0.9, class_id=0, class_name="Pothole"
+    )
+    report = DetectionReport(detection, sample_session_id, image_b64)
+    session = session_service.get_session(sample_session_id)
+    session.add_report(report)
+
+    # Get original image
+    img_resp = client.get(
+        f"/session/{sample_session_id}/report/{report.report_id}/image"
+    )
+    assert img_resp.status_code == 200
+    assert img_resp.headers["content-type"] == "image/jpeg"
+
+    # Get annotated plot
+    plot_resp = client.get(
+        f"/session/{sample_session_id}/report/{report.report_id}/plot"
+    )
+    assert plot_resp.status_code == 200
+    assert plot_resp.headers["content-type"] == "image/jpeg"
