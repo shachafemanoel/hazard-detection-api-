@@ -62,7 +62,17 @@ async def detect_hazards_with_session(
         image_stream.seek(0)
 
         try:
-            image = Image.open(image_stream).convert("RGB")
+            image = Image.open(image_stream)
+            # Ensure RGB format for consistent processing
+            if image.mode != 'RGB':
+                image = image.convert("RGB")
+                
+            # Validate image dimensions
+            if image.width == 0 or image.height == 0:
+                raise InvalidImageException("Image has invalid dimensions")
+                
+            logger.info(f"Image processed: {image.size} {image.mode}")
+                
         except Exception as e:
             raise InvalidImageException(f"Failed to process image: {str(e)}")
 
