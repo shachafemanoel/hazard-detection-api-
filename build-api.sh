@@ -13,7 +13,7 @@ docker build -t hazard-detection-api:latest .
 
 echo "✅ API Docker image built successfully!"
 echo "🚀 To run locally:"
-echo "   docker run -p 8000:8000 hazard-detection-api:latest"
+echo "   docker run -p 8080:8080 hazard-detection-api:latest"
 echo ""
 echo "🌐 To deploy to Railway:"
 echo "   1. Push this folder to a separate Git repository"
