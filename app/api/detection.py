@@ -7,7 +7,8 @@ import time
 from typing import Dict, List, Any, Optional
 from io import BytesIO
 from PIL import Image
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Body
+from pydantic import BaseModel
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
@@ -23,6 +24,12 @@ from ..services.session_service import session_service
 logger = get_logger("detection_api")
 
 router = APIRouter(tags=["detection"])
+
+
+class Base64DetectionRequest(BaseModel):
+    image: str  # Base64 encoded image
+    confidence_threshold: Optional[float] = 0.5
+    session_id: Optional[str] = None
 
 
 @router.post("/detect/{session_id}")
@@ -100,9 +107,77 @@ async def detect_hazards_with_session(
 
 
 @router.post("/detect")
-async def detect_hazards_legacy(file: UploadFile = File(...)) -> Dict[str, Any]:
+async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict[str, Any]:
     """
-    Legacy detection endpoint for backward compatibility
+    Detection endpoint that accepts base64 image data
+    Supports the frontend camera detection app format
+    """
+    try:
+        # Ensure model is loaded
+        if not model_service.is_loaded:
+            await model_service.load_model()
+
+        start_time = time.time()
+
+        # Decode base64 image
+        try:
+            image_data = base64.b64decode(detection_request.image)
+            image_stream = BytesIO(image_data)
+            image = Image.open(image_stream).convert("RGB")
+        except Exception as e:
+            raise InvalidImageException(f"Failed to decode base64 image: {str(e)}")
+
+        # Run model inference
+        detections = await model_service.predict(image)
+
+        # Convert detections to frontend-compatible format
+        frontend_detections = []
+        for detection in detections:
+            # Filter by confidence threshold
+            if detection.confidence >= detection_request.confidence_threshold:
+                frontend_detections.append({
+                    "x1": float(detection.bbox[0]),
+                    "y1": float(detection.bbox[1]),
+                    "x2": float(detection.bbox[2]),
+                    "y2": float(detection.bbox[3]),
+                    "score": float(detection.confidence),
+                    "classId": int(detection.class_id)
+                })
+
+        processing_time = round((time.time() - start_time) * 1000, 2)
+
+        logger.info(
+            f"Base64 detection: {len(frontend_detections)} detections in {processing_time}ms"
+        )
+
+        return {
+            "success": True,
+            "detections": frontend_detections,
+            "predictions": frontend_detections,  # Alternative key for compatibility
+            "processing_time_ms": processing_time,
+            "image_size": {"width": image.width, "height": image.height},
+            "model_info": {
+                **model_service.get_model_info(),
+                "classes": len(model_service.get_model_info().get("classes", [])),
+                "confidence_threshold": detection_request.confidence_threshold,
+            },
+        }
+
+    except ModelNotLoadedException as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except InvalidImageException as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except InferenceException as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Base64 detection error: {e}")
+        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
+
+
+@router.post("/detect-file")
+async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """
+    Legacy detection endpoint that accepts file uploads
     Returns detections without session tracking
     """
     if not file.content_type.startswith("image/"):
@@ -134,7 +209,7 @@ async def detect_hazards_legacy(file: UploadFile = File(...)) -> Dict[str, Any]:
         processing_time = round((time.time() - start_time) * 1000, 2)
 
         logger.info(
-            f"Legacy detection: {len(detections)} detections in {processing_time}ms"
+            f"File detection: {len(detections)} detections in {processing_time}ms"
         )
 
         return {
@@ -155,7 +230,7 @@ async def detect_hazards_legacy(file: UploadFile = File(...)) -> Dict[str, Any]:
     except InferenceException as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        logger.error(f"Legacy detection error: {e}")
+        logger.error(f"File detection error: {e}")
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 
