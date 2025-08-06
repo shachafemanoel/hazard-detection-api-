@@ -6,7 +6,8 @@ Uses Pydantic Settings for environment-based configuration
 import os
 from pathlib import Path
 from typing import List, Optional, Literal
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -79,9 +80,7 @@ class Settings(BaseSettings):
     # Health check settings
     healthcheck_timeout: int = Field(default=120, env="HEALTHCHECK_TIMEOUT")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 class ModelConfig:
