@@ -429,48 +429,66 @@ class ModelService:
         N, C, H, W = input_shape
         target_height, target_width = H, W
 
-        if cv2 is not None:
-            # Use OpenCV for better performance
-            # Ensure image is properly converted to numpy array
-            img_array = np.array(image)
-            if len(img_array.shape) != 3 or img_array.shape[2] != 3:
-                # Force RGB conversion if image format is unexpected
-                image = image.convert("RGB")
+        # Try OpenCV first, fall back to PIL if it fails
+        opencv_failed = False
+        
+        if cv2 is not None and not getattr(self, '_opencv_disabled', False):
+            try:
+                # Use OpenCV for better performance
+                # Ensure image is properly converted to numpy array
                 img_array = np.array(image)
-            
-            img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-            original_height, original_width = img_cv.shape[:2]
+                if len(img_array.shape) != 3 or img_array.shape[2] != 3:
+                    # Force RGB conversion if image format is unexpected
+                    image = image.convert("RGB")
+                    img_array = np.array(image)
+                
+                # Validate array before OpenCV processing
+                if not isinstance(img_array, np.ndarray) or img_array.size == 0:
+                    raise ValueError("Invalid numpy array for OpenCV")
+                
+                img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                original_height, original_width = img_cv.shape[:2]
 
-            # Calculate letterbox scale
-            scale = min(target_width / original_width, target_height / original_height)
-            new_width = int(original_width * scale)
-            new_height = int(original_height * scale)
+                # Calculate letterbox scale
+                scale = min(target_width / original_width, target_height / original_height)
+                new_width = int(original_width * scale)
+                new_height = int(original_height * scale)
 
-            # Resize and pad
-            resized_img = cv2.resize(
-                img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
-            )
-            letterbox_img = np.full(
-                (target_height, target_width, 3), 114, dtype=np.uint8
-            )
+                # Resize and pad
+                resized_img = cv2.resize(
+                    img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
+                )
+                letterbox_img = np.full(
+                    (target_height, target_width, 3), 114, dtype=np.uint8
+                )
 
-            paste_x = (target_width - new_width) // 2
-            paste_y = (target_height - new_height) // 2
-            letterbox_img[
-                paste_y : paste_y + new_height, paste_x : paste_x + new_width
-            ] = resized_img
+                paste_x = (target_width - new_width) // 2
+                paste_y = (target_height - new_height) // 2
+                letterbox_img[
+                    paste_y : paste_y + new_height, paste_x : paste_x + new_width
+                ] = resized_img
 
-            # Convert back to RGB
-            letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
-        else:
-            # PIL fallback
+                # Convert back to RGB
+                letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
+                
+                logger.debug("OpenCV image processing successful")
+                
+            except Exception as e:
+                logger.warning(f"OpenCV processing failed ({e}), falling back to PIL")
+                opencv_failed = True
+                # Disable OpenCV for future calls in this instance
+                self._opencv_disabled = True
+
+        # PIL fallback (either OpenCV unavailable or failed)
+        if cv2 is None or opencv_failed or getattr(self, '_opencv_disabled', False):
+            logger.info("Using PIL-only image processing")
             img_rgb = image.convert("RGB")
             original_width, original_height = img_rgb.size
             scale = min(target_width / original_width, target_height / original_height)
             new_width = int(original_width * scale)
             new_height = int(original_height * scale)
 
-            resized_img = img_rgb.resize((new_width, new_height))
+            resized_img = img_rgb.resize((new_width, new_height), Image.Resampling.LANCZOS)
             letterbox_img = Image.new(
                 "RGB", (target_width, target_height), (114, 114, 114)
             )
