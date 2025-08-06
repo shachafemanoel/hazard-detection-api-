@@ -49,10 +49,8 @@ class Settings(BaseSettings):
     tracking_time_threshold: float = Field(default=2.0, env="TRACKING_TIME_THRESHOLD")
 
     # CORS settings
-    cors_origins: List[str] = Field(
-        default=["https://*.railway.app"], env="CORS_ORIGINS"
-    )
-    cors_methods: List[str] = Field(default=["GET", "POST"], env="CORS_METHODS")
+    cors_origins: List[str] = Field(default=["*"], env="CORS_ORIGINS")
+    cors_methods: List[str] = Field(default=["*"], env="CORS_METHODS")
     cors_headers: List[str] = Field(default=["*"], env="CORS_HEADERS")
 
     # External API credentials
