@@ -449,8 +449,11 @@ class ModelService:
         
         if cv2 is not None and not getattr(self, '_opencv_disabled', False):
             try:
+                logger.info("Attempting OpenCV image processing...")
+                
                 # Convert PIL Image to numpy array with proper validation
                 img_array = np.array(image, dtype=np.uint8)
+                logger.info(f"PIL to numpy conversion: shape={img_array.shape}, dtype={img_array.dtype}")
                 
                 # Comprehensive validation of image array
                 if not isinstance(img_array, np.ndarray):
@@ -464,13 +467,18 @@ class ModelService:
                 
                 # Ensure data is contiguous and correct type for OpenCV
                 if not img_array.flags.c_contiguous:
+                    logger.info("Making array contiguous for OpenCV")
                     img_array = np.ascontiguousarray(img_array)
                 
                 if img_array.dtype != np.uint8:
+                    logger.info(f"Converting dtype from {img_array.dtype} to uint8")
                     img_array = img_array.astype(np.uint8)
+                
+                logger.info(f"Pre-OpenCV array: shape={img_array.shape}, dtype={img_array.dtype}, contiguous={img_array.flags.c_contiguous}")
                 
                 # Convert RGB to BGR for OpenCV
                 img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                logger.info(f"OpenCV cvtColor successful: shape={img_cv.shape if img_cv is not None else 'None'}")
                 
                 # Comprehensive validation of conversion result
                 if img_cv is None:
@@ -513,10 +521,14 @@ class ModelService:
                 # Perform resize with comprehensive validation
                 if img_cv.data is None:
                     raise ValueError("OpenCV image data is None")
+                
+                logger.info(f"About to resize OpenCV image: type={type(img_cv)}, shape={img_cv.shape}, dtype={img_cv.dtype}")
+                logger.info(f"Resize target dimensions: {new_width}x{new_height}")
                     
                 resized_img = cv2.resize(
                     img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
                 )
+                logger.info(f"OpenCV resize successful: shape={resized_img.shape if resized_img is not None else 'None'}")
                 
                 # Validate resize result
                 if resized_img is None or resized_img.size == 0:
@@ -542,7 +554,8 @@ class ModelService:
                 logger.debug("OpenCV image processing successful")
                 
             except Exception as e:
-                logger.warning(f"OpenCV processing failed ({e}), falling back to PIL")
+                logger.error(f"OpenCV processing failed: {e}")
+                logger.warning("Disabling OpenCV for this instance, falling back to PIL")
                 opencv_failed = True
                 # Disable OpenCV for this instance to avoid repeated failures
                 self._opencv_disabled = True
