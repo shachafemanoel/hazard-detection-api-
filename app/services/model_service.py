@@ -449,6 +449,7 @@ class ModelService:
                 img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
                 if img_cv is None:
                     raise ValueError("cv2.cvtColor returned None")
+
                 if hasattr(cv2, "UMat") and isinstance(img_cv, cv2.UMat):
                     logger.info("Converting cv2.UMat result to numpy array")
                     img_cv = img_cv.get()
@@ -457,6 +458,15 @@ class ModelService:
                         f"Converting {type(img_cv)} result to numpy array"
                     )
                     img_cv = np.asarray(img_cv, dtype=np.uint8)
+
+                # Ensure OpenCV receives a proper uint8 numpy array
+                if img_cv.dtype != np.uint8:
+                    logger.info(
+                        f"Converting image dtype from {img_cv.dtype} to uint8"
+                    )
+                    img_cv = img_cv.astype(np.uint8)
+                if not img_cv.flags.get("C_CONTIGUOUS", False):
+                    img_cv = np.ascontiguousarray(img_cv)
 
                 original_height, original_width = img_cv.shape[:2]
 
