@@ -62,15 +62,49 @@ async def detect_hazards_with_session(
         image_stream.seek(0)
 
         try:
+            # Enhanced image validation and loading
+            if len(contents) == 0:
+                raise InvalidImageException("Uploaded file is empty")
+            
+            # Validate file is likely an image by checking file signature
+            if len(contents) < 10:
+                raise InvalidImageException("File too small to be a valid image")
+            
+            # Check common image headers
+            if not (contents.startswith(b'\xff\xd8\xff') or  # JPEG
+                   contents.startswith(b'\x89PNG') or        # PNG
+                   contents.startswith(b'GIF8') or           # GIF
+                   contents.startswith(b'BM') or             # BMP
+                   contents.startswith(b'RIFF')):            # WebP (in RIFF container)
+                logger.warning("File doesn't match common image signatures, attempting to process anyway")
+            
             image = Image.open(image_stream)
+            
+            # Force load the image to catch any corruption issues early
+            try:
+                image.load()
+            except Exception as load_error:
+                raise InvalidImageException(f"Image file appears to be corrupted: {load_error}")
+            
+            # Validate basic image properties
+            if not hasattr(image, 'size') or len(image.size) != 2:
+                raise InvalidImageException("Invalid image structure")
+            
             # Ensure RGB format for consistent processing
             if image.mode != 'RGB':
                 logger.info(f"Converting image from {image.mode} to RGB")
-                image = image.convert("RGB")
+                try:
+                    image = image.convert("RGB")
+                except Exception as conv_error:
+                    raise InvalidImageException(f"Failed to convert image to RGB: {conv_error}")
                 
             # Validate image dimensions
-            if image.width == 0 or image.height == 0:
-                raise InvalidImageException("Image has invalid dimensions")
+            if image.width <= 0 or image.height <= 0:
+                raise InvalidImageException(f"Image has invalid dimensions: {image.width}x{image.height}")
+                
+            # Check for extremely small images that might cause processing issues
+            if image.width < 10 or image.height < 10:
+                raise InvalidImageException(f"Image too small for processing: {image.width}x{image.height} (minimum 10x10)")
                 
             # Additional validation for common issues
             if image.width > 8192 or image.height > 8192:
@@ -79,8 +113,11 @@ async def detect_hazards_with_session(
                 max_size = 4096
                 if image.width > max_size or image.height > max_size:
                     ratio = min(max_size / image.width, max_size / image.height)
-                    new_size = (int(image.width * ratio), int(image.height * ratio))
-                    image = image.resize(new_size, Image.Resampling.LANCZOS)
+                    new_size = (max(1, int(image.width * ratio)), max(1, int(image.height * ratio)))
+                    try:
+                        image = image.resize(new_size, Image.Resampling.LANCZOS)
+                    except Exception as resize_error:
+                        raise InvalidImageException(f"Failed to resize large image: {resize_error}")
                 
             logger.info(f"Image processed: {image.size} {image.mode}")
                 
@@ -95,9 +132,20 @@ async def detect_hazards_with_session(
                 image.load()  # Force load the image data
                 if image.mode != 'RGB':
                     image = image.convert("RGB")
+                
+                # Re-validate after alternative loading
+                if image.width <= 0 or image.height <= 0:
+                    raise InvalidImageException(f"Alternative loading produced invalid dimensions: {image.width}x{image.height}")
+                    
                 logger.info(f"Alternative loading successful: {image.size} {image.mode}")
             except Exception as e2:
-                raise InvalidImageException(f"Failed to process image with both methods: {str(e)} | {str(e2)}")
+                # Provide more specific error message based on the original error
+                if "cannot identify image file" in str(e).lower():
+                    raise InvalidImageException("File is not a valid image format or is corrupted")
+                elif "truncated" in str(e).lower():
+                    raise InvalidImageException("Image file appears to be truncated or incomplete")
+                else:
+                    raise InvalidImageException(f"Failed to process image with both methods: Primary error: {str(e)}, Fallback error: {str(e2)}")
 
         # Store original image data for reports (base64 encoded)
         image_base64 = base64.b64encode(contents).decode("utf-8")
@@ -159,18 +207,63 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
 
         # Decode base64 image
         try:
-            image_data = base64.b64decode(detection_request.image)
+            # Validate base64 string
+            if not detection_request.image or len(detection_request.image.strip()) == 0:
+                raise InvalidImageException("Base64 image string is empty")
+            
+            # Remove data URL prefix if present
+            image_b64 = detection_request.image.strip()
+            if image_b64.startswith('data:'):
+                if ',' in image_b64:
+                    image_b64 = image_b64.split(',', 1)[1]
+                else:
+                    raise InvalidImageException("Invalid data URL format in base64 string")
+            
+            # Validate base64 string length
+            if len(image_b64) < 100:  # Very small for any meaningful image
+                raise InvalidImageException("Base64 string too short to contain valid image data")
+            
+            try:
+                image_data = base64.b64decode(image_b64, validate=True)
+            except Exception as decode_error:
+                raise InvalidImageException(f"Invalid base64 encoding: {decode_error}")
+            
+            if len(image_data) == 0:
+                raise InvalidImageException("Decoded base64 image data is empty")
+            
             image_stream = BytesIO(image_data)
             image_stream.seek(0)
             
+            # Validate image file signature
+            if len(image_data) < 10:
+                raise InvalidImageException("Decoded image data too small to be valid")
+            
             image = Image.open(image_stream)
+            
+            # Force load to catch corruption early
+            try:
+                image.load()
+            except Exception as load_error:
+                raise InvalidImageException(f"Base64 image appears to be corrupted: {load_error}")
+            
+            # Validate basic image properties
+            if not hasattr(image, 'size') or len(image.size) != 2:
+                raise InvalidImageException("Invalid base64 image structure")
+            
             if image.mode != 'RGB':
                 logger.info(f"Converting base64 image from {image.mode} to RGB")
-                image = image.convert("RGB")
+                try:
+                    image = image.convert("RGB")
+                except Exception as conv_error:
+                    raise InvalidImageException(f"Failed to convert base64 image to RGB: {conv_error}")
                 
             # Validate dimensions
-            if image.width == 0 or image.height == 0:
-                raise InvalidImageException("Base64 image has invalid dimensions")
+            if image.width <= 0 or image.height <= 0:
+                raise InvalidImageException(f"Base64 image has invalid dimensions: {image.width}x{image.height}")
+            
+            # Check for extremely small images
+            if image.width < 10 or image.height < 10:
+                raise InvalidImageException(f"Base64 image too small for processing: {image.width}x{image.height} (minimum 10x10)")
                 
             logger.info(f"Base64 image processed: {image.size} {image.mode}")
             
@@ -184,9 +277,19 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
                 image = Image.open(image_stream)
                 image.load()
                 image = image.convert("RGB")
+                
+                # Re-validate after alternative loading
+                if image.width <= 0 or image.height <= 0:
+                    raise InvalidImageException(f"Alternative base64 loading produced invalid dimensions: {image.width}x{image.height}")
+                    
                 logger.info(f"Alternative base64 decoding successful: {image.size} {image.mode}")
             except Exception as e2:
-                raise InvalidImageException(f"Failed to decode base64 image with both methods: {str(e)} | {str(e2)}")
+                if "cannot identify image file" in str(e).lower():
+                    raise InvalidImageException("Base64 data is not a valid image format")
+                elif "invalid base64" in str(e).lower():
+                    raise InvalidImageException("Invalid base64 encoding provided")
+                else:
+                    raise InvalidImageException(f"Failed to decode base64 image with both methods: Primary: {str(e)}, Fallback: {str(e2)}")
 
         # Run model inference
         detections = await ms.predict(image)

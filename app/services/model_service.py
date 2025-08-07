@@ -429,102 +429,161 @@ class ModelService:
         N, C, H, W = input_shape
         target_height, target_width = H, W
 
+        # Validate input image first
+        if not isinstance(image, Image.Image):
+            raise ValueError(f"Expected PIL Image, got {type(image)}")
+        
+        if image.size[0] <= 0 or image.size[1] <= 0:
+            raise ValueError(f"Invalid image dimensions: {image.size}")
+
+        # Always ensure RGB format for consistent processing
+        try:
+            image = image.convert("RGB")
+            original_width, original_height = image.size
+            logger.debug(f"Input image: {original_width}x{original_height} RGB")
+        except Exception as e:
+            raise ValueError(f"Failed to convert image to RGB: {e}")
+
         # Try OpenCV first, fall back to PIL if it fails
         opencv_failed = False
         
         if cv2 is not None and not getattr(self, '_opencv_disabled', False):
             try:
-                # Use OpenCV for better performance
-                # Ensure image is properly converted to numpy array
-                img_array = np.array(image)
+                # Convert PIL Image to numpy array with proper validation
+                img_array = np.array(image, dtype=np.uint8)
+                
+                # Comprehensive validation of image array
+                if not isinstance(img_array, np.ndarray):
+                    raise ValueError("Failed to convert PIL Image to numpy array")
+                    
+                if img_array.size == 0:
+                    raise ValueError("Empty image array")
+                    
                 if len(img_array.shape) != 3 or img_array.shape[2] != 3:
-                    # Force RGB conversion if image format is unexpected
-                    image = image.convert("RGB")
-                    img_array = np.array(image)
+                    raise ValueError(f"Invalid array shape after RGB conversion: {img_array.shape}")
                 
-                # Validate array before OpenCV processing
-                if not isinstance(img_array, np.ndarray) or img_array.size == 0:
-                    raise ValueError("Invalid numpy array for OpenCV")
+                # Ensure data is contiguous and correct type for OpenCV
+                if not img_array.flags.c_contiguous:
+                    img_array = np.ascontiguousarray(img_array)
                 
+                if img_array.dtype != np.uint8:
+                    img_array = img_array.astype(np.uint8)
+                
+                # Convert RGB to BGR for OpenCV
                 img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                
+                # Comprehensive validation of conversion result
                 if img_cv is None:
                     raise ValueError("cv2.cvtColor returned None")
 
+                # Handle different OpenCV return types (UMat, etc.)
                 if hasattr(cv2, "UMat") and isinstance(img_cv, cv2.UMat):
                     logger.info("Converting cv2.UMat result to numpy array")
                     img_cv = img_cv.get()
                 elif not isinstance(img_cv, np.ndarray):
-                    logger.info(
-                        f"Converting {type(img_cv)} result to numpy array"
-                    )
+                    logger.info(f"Converting {type(img_cv)} result to numpy array")
                     img_cv = np.asarray(img_cv, dtype=np.uint8)
 
-                # Ensure OpenCV receives a proper uint8 numpy array
+                # Final validation and formatting
+                if img_cv.size == 0:
+                    raise ValueError("OpenCV color conversion produced empty result")
+                    
                 if img_cv.dtype != np.uint8:
-                    logger.info(
-                        f"Converting image dtype from {img_cv.dtype} to uint8"
-                    )
+                    logger.info(f"Converting image dtype from {img_cv.dtype} to uint8")
                     img_cv = img_cv.astype(np.uint8)
+                    
                 if not img_cv.flags.get("C_CONTIGUOUS", False):
                     img_cv = np.ascontiguousarray(img_cv)
 
-                original_height, original_width = img_cv.shape[:2]
+                cv_height, cv_width = img_cv.shape[:2]
+                
+                # Validate dimensions match original
+                if cv_width != original_width or cv_height != original_height:
+                    raise ValueError(f"Dimension mismatch after OpenCV conversion: expected {original_width}x{original_height}, got {cv_width}x{cv_height}")
 
                 # Calculate letterbox scale
                 scale = min(target_width / original_width, target_height / original_height)
-                new_width = int(original_width * scale)
-                new_height = int(original_height * scale)
+                new_width = max(1, int(original_width * scale))
+                new_height = max(1, int(original_height * scale))
+                
+                # Validate new dimensions
+                if new_width <= 0 or new_height <= 0:
+                    raise ValueError(f"Invalid resize dimensions: {new_width}x{new_height}")
 
-                # Resize and pad
-                try:
-                    resized_img = cv2.resize(
-                        img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
-                    )
-                    letterbox_img = np.full(
-                        (target_height, target_width, 3), 114, dtype=np.uint8
-                    )
+                # Perform resize with comprehensive validation
+                if img_cv.data is None:
+                    raise ValueError("OpenCV image data is None")
+                    
+                resized_img = cv2.resize(
+                    img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
+                )
+                
+                # Validate resize result
+                if resized_img is None or resized_img.size == 0:
+                    raise ValueError("OpenCV resize operation failed")
+                
+                # Create letterbox image
+                letterbox_img = np.full(
+                    (target_height, target_width, 3), 114, dtype=np.uint8
+                )
 
-                    paste_x = (target_width - new_width) // 2
-                    paste_y = (target_height - new_height) // 2
-                    letterbox_img[
-                        paste_y : paste_y + new_height, paste_x : paste_x + new_width
-                    ] = resized_img
+                paste_x = (target_width - new_width) // 2
+                paste_y = (target_height - new_height) // 2
+                letterbox_img[
+                    paste_y : paste_y + new_height, paste_x : paste_x + new_width
+                ] = resized_img
 
-                    # Convert back to RGB
-                    letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
-
-                    logger.info("OpenCV image processing successful")
-                except Exception as e:
-                    logger.warning(
-                        f"OpenCV resize failed ({e}), falling back to PIL"
-                    )
-                    opencv_failed = True
-                    self._opencv_disabled = True
+                # Convert back to RGB with validation
+                letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
+                
+                if letterbox_img is None:
+                    raise ValueError("Final BGR to RGB conversion failed")
+                
+                logger.debug("OpenCV image processing successful")
                 
             except Exception as e:
                 logger.warning(f"OpenCV processing failed ({e}), falling back to PIL")
                 opencv_failed = True
-                # Disable OpenCV for future calls in this instance
+                # Disable OpenCV for this instance to avoid repeated failures
                 self._opencv_disabled = True
 
         # PIL fallback (either OpenCV unavailable or failed)
         if cv2 is None or opencv_failed or getattr(self, '_opencv_disabled', False):
             logger.info("Using PIL-only image processing")
-            img_rgb = image.convert("RGB")
-            original_width, original_height = img_rgb.size
-            scale = min(target_width / original_width, target_height / original_height)
-            new_width = int(original_width * scale)
-            new_height = int(original_height * scale)
+            try:
+                # Image is already in RGB format from validation above
+                scale = min(target_width / original_width, target_height / original_height)
+                new_width = max(1, int(original_width * scale))
+                new_height = max(1, int(original_height * scale))
 
-            resized_img = img_rgb.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            letterbox_img = Image.new(
-                "RGB", (target_width, target_height), (114, 114, 114)
-            )
-            paste_x = (target_width - new_width) // 2
-            paste_y = (target_height - new_height) // 2
-            letterbox_img.paste(resized_img, (paste_x, paste_y))
+                # Validate dimensions
+                if new_width <= 0 or new_height <= 0:
+                    raise ValueError(f"Invalid PIL resize dimensions: {new_width}x{new_height}")
 
-            letterbox_img = np.array(letterbox_img)
+                resized_img = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                letterbox_img = Image.new(
+                    "RGB", (target_width, target_height), (114, 114, 114)
+                )
+                paste_x = (target_width - new_width) // 2
+                paste_y = (target_height - new_height) // 2
+                letterbox_img.paste(resized_img, (paste_x, paste_y))
+
+                letterbox_img = np.array(letterbox_img, dtype=np.uint8)
+                
+                if letterbox_img is None or letterbox_img.size == 0:
+                    raise ValueError("PIL processing resulted in empty array")
+                
+                logger.debug("PIL image processing successful")
+                
+            except Exception as e:
+                raise ValueError(f"Both OpenCV and PIL processing failed: {e}")
+
+        # Final validation and normalization
+        if letterbox_img is None or letterbox_img.size == 0:
+            raise ValueError("Final processed image is empty")
+        
+        if len(letterbox_img.shape) != 3 or letterbox_img.shape[2] != 3:
+            raise ValueError(f"Invalid final image shape: {letterbox_img.shape}")
 
         # Normalize and transpose
         img_array = letterbox_img.astype(np.float32) / 255.0
