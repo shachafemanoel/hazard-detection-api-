@@ -447,6 +447,14 @@ class ModelService:
                     raise ValueError("Invalid numpy array for OpenCV")
                 
                 img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                # Some OpenCV builds may return non-ndarray types (e.g. UMat)
+                # which cause cv2.resize to raise a type error. Convert any
+                # such result explicitly to a numpy array so resizing always
+                # receives a valid src.
+                if img_cv is None:
+                    raise ValueError("cv2.cvtColor returned None")
+                if not isinstance(img_cv, np.ndarray):
+                    img_cv = np.asarray(img_cv)
                 original_height, original_width = img_cv.shape[:2]
 
                 # Calculate letterbox scale
