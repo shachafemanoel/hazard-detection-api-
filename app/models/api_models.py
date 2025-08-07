@@ -228,6 +228,7 @@ class ReportActionResponse(BaseModel):
 # Status models
 class DeviceInfo(BaseModel):
     """Device information"""
+    model_config = model_config
 
     device: Optional[str] = Field(None, example="AUTO")
     input_shape: Optional[List[int]] = Field(None, example=[1, 3, 480, 480])
@@ -256,6 +257,7 @@ class EnvironmentInfo(BaseModel):
 
 class ModelFiles(BaseModel):
     """Model file information"""
+    model_config = model_config
 
     openvino_model: str = Field(
         ..., example="/app/best0408_openvino_model/best0408.xml"
@@ -289,6 +291,7 @@ class EndpointsInfo(BaseModel):
 
 class StatusResponse(BaseModel):
     """Detailed status response"""
+    model_config = model_config
 
     status: str = Field(..., example="healthy")
     model_status: str = Field(..., example="loaded_openvino")

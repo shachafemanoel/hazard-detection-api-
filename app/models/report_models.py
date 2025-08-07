@@ -5,8 +5,10 @@ Report data models for the Hazard Detection API
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
+# Global model configuration to suppress warnings
+model_config = ConfigDict(protected_namespaces=())
 
 class ReportStatus(str, Enum):
     """Report status enumeration"""
@@ -57,6 +59,8 @@ class DetectionInfo(BaseModel):
 
 class ReportMetadata(BaseModel):
     """Additional metadata for reports"""
+    model_config = model_config
+    
     session_id: str
     source: Optional[str] = "api"  # api, manual, batch, etc.
     device_info: Optional[Dict[str, Any]] = None

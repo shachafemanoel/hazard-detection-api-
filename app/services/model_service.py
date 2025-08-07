@@ -135,6 +135,11 @@ class ModelService:
 
     async def _try_load_openvino(self) -> bool:
         """Try to load OpenVINO model"""
+        # Check if OpenVINO is disabled via environment variable
+        if os.getenv('DISABLE_OPENVINO', 'false').lower() == 'true':
+            logger.info("📝 OpenVINO disabled by DISABLE_OPENVINO environment variable")
+            return False
+            
         if ov is None:
             logger.info("OpenVINO not available - skipping")
             return False
@@ -250,6 +255,20 @@ class ModelService:
             # Load PyTorch model
             os.environ["YOLO_VERBOSE"] = "False"
             self.model = YOLO(str(model_path))
+
+            # Override model class names to match best0408 configuration
+            # This ensures consistency between OpenVINO and PyTorch backends
+            if hasattr(self.model, 'names') and len(self.model.names) == 4:
+                logger.info("🔧 Overriding PyTorch model class names to match best0408 configuration")
+                self.model.names = {
+                    0: "crack",
+                    1: "knocked", 
+                    2: "pothole",
+                    3: "surface damage"
+                }
+                logger.info(f"📝 Updated class names: {list(self.model.names.values())}")
+            else:
+                logger.warning(f"⚠️ PyTorch model has {len(getattr(self.model, 'names', {}))} classes, expected 4")
 
             # Mark as loaded
             self.backend = "pytorch"
