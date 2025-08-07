@@ -447,14 +447,17 @@ class ModelService:
                     raise ValueError("Invalid numpy array for OpenCV")
                 
                 img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-                # Some OpenCV builds may return non-ndarray types (e.g. UMat)
-                # which cause cv2.resize to raise a type error. Convert any
-                # such result explicitly to a numpy array so resizing always
-                # receives a valid src.
                 if img_cv is None:
                     raise ValueError("cv2.cvtColor returned None")
-                if not isinstance(img_cv, np.ndarray):
-                    img_cv = np.asarray(img_cv)
+                if hasattr(cv2, "UMat") and isinstance(img_cv, cv2.UMat):
+                    logger.info("Converting cv2.UMat result to numpy array")
+                    img_cv = img_cv.get()
+                elif not isinstance(img_cv, np.ndarray):
+                    logger.info(
+                        f"Converting {type(img_cv)} result to numpy array"
+                    )
+                    img_cv = np.asarray(img_cv, dtype=np.uint8)
+
                 original_height, original_width = img_cv.shape[:2]
 
                 # Calculate letterbox scale
@@ -463,23 +466,30 @@ class ModelService:
                 new_height = int(original_height * scale)
 
                 # Resize and pad
-                resized_img = cv2.resize(
-                    img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
-                )
-                letterbox_img = np.full(
-                    (target_height, target_width, 3), 114, dtype=np.uint8
-                )
+                try:
+                    resized_img = cv2.resize(
+                        img_cv, (new_width, new_height), interpolation=cv2.INTER_LINEAR
+                    )
+                    letterbox_img = np.full(
+                        (target_height, target_width, 3), 114, dtype=np.uint8
+                    )
 
-                paste_x = (target_width - new_width) // 2
-                paste_y = (target_height - new_height) // 2
-                letterbox_img[
-                    paste_y : paste_y + new_height, paste_x : paste_x + new_width
-                ] = resized_img
+                    paste_x = (target_width - new_width) // 2
+                    paste_y = (target_height - new_height) // 2
+                    letterbox_img[
+                        paste_y : paste_y + new_height, paste_x : paste_x + new_width
+                    ] = resized_img
 
-                # Convert back to RGB
-                letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
-                
-                logger.info("OpenCV image processing successful")
+                    # Convert back to RGB
+                    letterbox_img = cv2.cvtColor(letterbox_img, cv2.COLOR_BGR2RGB)
+
+                    logger.info("OpenCV image processing successful")
+                except Exception as e:
+                    logger.warning(
+                        f"OpenCV resize failed ({e}), falling back to PIL"
+                    )
+                    opencv_failed = True
+                    self._opencv_disabled = True
                 
             except Exception as e:
                 logger.warning(f"OpenCV processing failed ({e}), falling back to PIL")
