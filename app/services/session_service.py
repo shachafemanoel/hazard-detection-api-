@@ -33,6 +33,9 @@ class DetectionReport:
         self.status = "pending"  # pending, confirmed, dismissed
         self.image_data = image_data
         self.thumbnail = None
+        self.persistent_report_id = None  # ID of persistent report if created
+        self.create_persistent = False  # Flag for persistent report creation
+        self.image_data_for_persistent = None  # Image data for persistent report
 
         # Location information
         self.location = {
@@ -56,6 +59,8 @@ class DetectionReport:
             "status": self.status,
             "location": self.location,
             "frame_info": self.frame_info,
+            "persistent_report_id": self.persistent_report_id,
+            "has_persistent_report": self.persistent_report_id is not None,
         }
 
 
@@ -78,19 +83,44 @@ class DetectionSession:
 
     def get_summary(self) -> Dict[str, Any]:
         """Get session summary"""
+        # Calculate session duration
+        from datetime import datetime
+        start_dt = datetime.fromisoformat(self.start_time)
+        current_dt = datetime.now()
+        duration_seconds = (current_dt - start_dt).total_seconds()
+        
+        # Calculate average confidence from reports
+        total_confidence = 0.0
+        confidence_count = 0
+        for report in self.reports:
+            if report.detection.confidence > 0:
+                total_confidence += report.detection.confidence
+                confidence_count += 1
+        
+        avg_confidence = total_confidence / confidence_count if confidence_count > 0 else 0.0
+        
+        # Get class distribution
+        class_counts = {}
+        for report in self.reports:
+            class_name = report.detection.class_name
+            class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        
         return {
-            "id": self.id,
+            "session_id": self.id,
             "start_time": self.start_time,
-            "reports": [report.to_dict() for report in self.reports],
-            "detection_count": self.detection_count,
-            "unique_hazards": self.unique_hazards,
-            "pending_reports": len([r for r in self.reports if r.status == "pending"]),
-            "confirmed_reports": len(
-                [r for r in self.reports if r.status == "confirmed"]
-            ),
-            "dismissed_reports": len(
-                [r for r in self.reports if r.status == "dismissed"]
-            ),
+            "duration_seconds": duration_seconds,
+            "metadata": self.metadata,
+            "stats": {
+                "total_detections": self.detection_count,
+                "unique_hazards": self.unique_hazards,
+                "pending_reports": len([r for r in self.reports if r.status == "pending"]),
+                "confirmed_reports": len([r for r in self.reports if r.status == "confirmed"]),
+                "dismissed_reports": len([r for r in self.reports if r.status == "dismissed"]),
+                "average_confidence": round(avg_confidence, 3),
+                "class_distribution": class_counts,
+                "active_detections_count": len(self.active_detections)
+            },
+            "reports": [report.to_dict() for report in self.reports]
         }
 
 
@@ -133,7 +163,7 @@ class SessionService:
         session = self.get_session(session_id)
         return session.get_summary()
 
-    def process_detections(
+    async def process_detections(
         self,
         session_id: str,
         detections: List[DetectionResult],
@@ -165,6 +195,11 @@ class SessionService:
                     session.add_report(report)
                     new_reports.append(report)
 
+                    # Mark for persistent report creation (will be handled after main processing)
+                    if settings.auto_create_reports:
+                        report.create_persistent = True
+                        report.image_data_for_persistent = image_data
+
                     # Add to active detections for tracking
                     tracking_detection = detection.to_dict()
                     tracking_detection.update(
@@ -186,7 +221,8 @@ class SessionService:
 
             processed_detections.append(detection_dict)
 
-        return {
+        # Return processing results
+        result = {
             "detections": processed_detections,
             "new_reports": [report.to_dict() for report in new_reports],
             "session_stats": {
@@ -197,6 +233,21 @@ class SessionService:
                 ),
             },
         }
+        
+        # Create persistent reports asynchronously (don't block the response)
+        reports_to_persist = [r for r in new_reports if getattr(r, 'create_persistent', False)]
+        if reports_to_persist:
+            try:
+                import asyncio
+                current_loop = asyncio.current_task()
+                if current_loop:
+                    # Create background task for persistent report creation
+                    asyncio.create_task(self._create_persistent_reports(reports_to_persist, session_id))
+                    logger.info(f"Scheduled {len(reports_to_persist)} reports for persistent creation")
+            except Exception as e:
+                logger.error(f"Failed to schedule persistent reports: {e}")
+        
+        return result
 
     def confirm_report(self, session_id: str, report_id: str) -> Dict[str, Any]:
         """Confirm a report for submission"""
@@ -275,6 +326,33 @@ class SessionService:
             logger.info(f"Cleaned up old session: {session_id}")
 
         return len(sessions_to_remove)
+
+    async def _create_persistent_reports(self, reports: List[DetectionReport], session_id: str):
+        """Create persistent reports in the background"""
+        try:
+            from .report_service import report_service
+            
+            for report in reports:
+                try:
+                    additional_metadata = {
+                        "processing_time_ms": time.time() * 1000,
+                        "session_report_id": report.report_id
+                    }
+                    
+                    persistent_report = await report_service.create_report_from_detection(
+                        report.detection, session_id, 
+                        report.image_data_for_persistent, additional_metadata
+                    )
+                    
+                    # Update session report with persistent ID
+                    report.persistent_report_id = persistent_report.id
+                    logger.info(f"Created persistent report {persistent_report.id} for session report {report.report_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to create persistent report for {report.report_id}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to create persistent reports: {e}")
 
 
 # Global session service instance
