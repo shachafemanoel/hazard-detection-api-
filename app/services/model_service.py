@@ -95,6 +95,8 @@ class ModelService:
         self.output_layer = None
         self.infer_request = None
         self._load_start_time = None
+        # Disable OpenCV by default in problematic environments
+        self._opencv_disabled = os.getenv('DISABLE_OPENCV', 'false').lower() == 'true'
 
     async def load_model(self) -> bool:
         """Load model with intelligent backend selection"""
@@ -447,7 +449,12 @@ class ModelService:
         # Try OpenCV first, fall back to PIL if it fails
         opencv_failed = False
         
-        if cv2 is not None and not getattr(self, '_opencv_disabled', False):
+        # Check if OpenCV should be used at all
+        opencv_enabled = (cv2 is not None and 
+                         not getattr(self, '_opencv_disabled', False) and
+                         os.getenv('FORCE_PIL_ONLY', 'false').lower() != 'true')
+        
+        if opencv_enabled:
             try:
                 logger.info("Attempting OpenCV image processing...")
                 
@@ -560,8 +567,8 @@ class ModelService:
                 # Disable OpenCV for this instance to avoid repeated failures
                 self._opencv_disabled = True
 
-        # PIL fallback (either OpenCV unavailable or failed)
-        if cv2 is None or opencv_failed or getattr(self, '_opencv_disabled', False):
+        # PIL fallback (either OpenCV unavailable, failed, or disabled)
+        if not opencv_enabled or opencv_failed:
             logger.info("Using PIL-only image processing")
             try:
                 # Image is already in RGB format from validation above
