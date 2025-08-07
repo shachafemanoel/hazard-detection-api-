@@ -57,8 +57,17 @@ if [ -f "best.pt" ]; then
     echo "   Size: $MODEL_SIZE"
 fi
 
-if [ -d "best_openvino_model" ] && [ -f "best_openvino_model/best.xml" ]; then
-    echo "✅ OpenVINO model found"
+if [ -d "best0408_openvino_model" ] && [ -f "best0408_openvino_model/best0408.xml" ]; then
+    echo "✅ OpenVINO model (best0408) found"
+    if [ -f "best0408_openvino_model/best0408.bin" ]; then
+        echo "✅ OpenVINO weights found"
+        OPENVINO_SIZE=$(du -sh "best0408_openvino_model" | cut -f1)
+        echo "   Size: $OPENVINO_SIZE"
+    else
+        echo "⚠️  OpenVINO weights (best0408.bin) missing"
+    fi
+elif [ -d "best_openvino_model" ] && [ -f "best_openvino_model/best.xml" ]; then
+    echo "✅ Legacy OpenVINO model found"
     if [ -f "best_openvino_model/best.bin" ]; then
         echo "✅ OpenVINO weights found"
         OPENVINO_SIZE=$(du -sh "best_openvino_model" | cut -f1)
@@ -70,10 +79,11 @@ else
     echo "⚠️  OpenVINO model not found"
 fi
 
-if [ ! -f "best.pt" ] && [ ! -f "best_openvino_model/best.xml" ]; then
+if [ ! -f "best.pt" ] && [ ! -f "best0408_openvino_model/best0408.xml" ] && [ ! -f "best_openvino_model/best.xml" ]; then
     echo "❌ No model files found! Please add either:"
     echo "   - best.pt (PyTorch model)"
-    echo "   - best_openvino_model/best.xml + best.bin (OpenVINO model)"
+    echo "   - best0408_openvino_model/best0408.xml + best0408.bin (OpenVINO model)"
+    echo "   - best_openvino_model/best.xml + best.bin (Legacy OpenVINO model)"
     echo ""
     echo "Continuing deployment anyway (API will run but detection will fail)"
     read -p "Continue? (y/N): " -n 1 -r
