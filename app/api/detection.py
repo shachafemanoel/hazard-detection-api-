@@ -106,7 +106,7 @@ async def detect_hazards_with_session(
         detections = await ms.predict(image)
 
         # Process detections with session tracking
-        processing_result = session_service.process_detections(
+        processing_result = await session_service.process_detections(
             session_id, detections, image_base64
         )
 

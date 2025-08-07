@@ -47,6 +47,14 @@ class Settings(BaseSettings):
         default=50, env="TRACKING_DISTANCE_THRESHOLD"
     )
     tracking_time_threshold: float = Field(default=2.0, env="TRACKING_TIME_THRESHOLD")
+    
+    # Report management settings
+    reports_per_page: int = Field(default=20, env="REPORTS_PER_PAGE")
+    max_reports_per_request: int = Field(default=100, env="MAX_REPORTS_PER_REQUEST")
+    report_image_max_size_mb: int = Field(default=10, env="REPORT_IMAGE_MAX_SIZE_MB")
+    report_retention_days: int = Field(default=90, env="REPORT_RETENTION_DAYS")
+    auto_create_reports: bool = Field(default=True, env="AUTO_CREATE_REPORTS")
+    geocoding_enabled: bool = Field(default=True, env="GEOCODING_ENABLED")
 
     # CORS settings
     cors_origins: List[str] = Field(default=["*"], env="CORS_ORIGINS")
@@ -55,7 +63,16 @@ class Settings(BaseSettings):
 
     # External API credentials
     google_maps_api_key: Optional[str] = Field(default=None, env="GOOGLE_MAPS_API_KEY")
+    
+    # Redis settings for report storage
     redis_url: Optional[str] = Field(default=None, env="REDIS_URL")
+    redis_host: Optional[str] = Field(default=None, env="REDIS_HOST")
+    redis_port: int = Field(default=6379, env="REDIS_PORT")
+    redis_username: Optional[str] = Field(default="default", env="REDIS_USERNAME")
+    redis_password: Optional[str] = Field(default=None, env="REDIS_PASSWORD")
+    redis_db: int = Field(default=0, env="REDIS_DB")
+    
+    # Cloudinary settings for image storage
     cloudinary_cloud_name: Optional[str] = Field(
         default=None, env="CLOUDINARY_CLOUD_NAME"
     )

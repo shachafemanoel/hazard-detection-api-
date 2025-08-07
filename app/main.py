@@ -19,7 +19,7 @@ from .core.exceptions import (
 from .services.model_service import model_service
 from .services.session_service import session_service
 from .services.performance_monitor import performance_monitor
-from .api import health, sessions, detection, external_apis
+from .api import health, sessions, detection, external_apis, reports
 
 logger = get_logger("main")
 
@@ -84,6 +84,7 @@ app.add_exception_handler(HazardDetectionException, hazard_detection_exception_h
 app.include_router(health.router)
 app.include_router(sessions.router)
 app.include_router(detection.router)
+app.include_router(reports.router)
 app.include_router(external_apis.router)
 
 
