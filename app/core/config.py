@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     model_backend: Literal["auto", "openvino", "pytorch"] = Field(
         default="auto", env="MODEL_BACKEND"
     )
-    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")
+    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0408 model requirements
 
     # OpenVINO settings
     openvino_device: str = Field(default="AUTO", env="OPENVINO_DEVICE")
@@ -107,25 +107,22 @@ class ModelConfig:
 
     @property
     def class_names(self) -> List[str]:
-        """YOLO class names for hazard detection"""
+        """YOLO class names for hazard detection (best0408 model)"""
         return [
-            "Alligator Crack",
-            "Block Crack",
-            "Crosswalk Blur",
-            "Lane Blur",
-            "Longitudinal Crack",
-            "Manhole",
-            "Patch Repair",
-            "Pothole",
-            "Transverse Crack",
-            "Wheel Mark Crack",
+            "crack",           # 0: General crack damage
+            "knocked",         # 1: Knocked/damaged surface  
+            "pothole",         # 2: Pothole damage
+            "surface damage",  # 3: Surface damage
         ]
 
     @property
     def openvino_model_paths(self) -> List[Path]:
-        """Potential OpenVINO model file paths"""
+        """Potential OpenVINO model file paths (prioritized by preference)"""
         return [
+            # Primary model (best0408 - 4 classes)
             self.base_dir / "best0408_openvino_model" / "best0408.xml",
+            
+            # Legacy models (fallback)
             self.base_dir / "best_openvino_model" / "last_model_train12052025.xml",
             self.base_dir / "best_openvino_model" / "best.xml",
             self.base_dir / "last_model_train12052025.xml",

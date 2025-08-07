@@ -54,7 +54,7 @@ class Detection(BaseModel):
         ..., description="Detection confidence score", example=0.85, ge=0.0, le=1.0
     )
     class_id: int = Field(..., description="Class ID", example=0)
-    class_name: str = Field(..., description="Class name", example="Pothole")
+    class_name: str = Field(..., description="Class name", example="pothole")
     center_x: float = Field(
         ..., description="Bounding box center X coordinate", example=150.0
     )
@@ -84,8 +84,8 @@ class ModelInfo(BaseModel):
 
     status: str = Field(..., example="loaded")
     backend: str = Field(..., example="openvino")
-    classes: List[str] = Field(..., example=["Pothole", "Alligator Crack"])
-    class_count: int = Field(..., example=10)
+    classes: List[str] = Field(..., example=["crack", "knocked", "pothole", "surface damage"])
+    class_count: int = Field(..., example=4)
     confidence_threshold: Optional[float] = Field(None, example=0.6)
     tracking_enabled: Optional[bool] = Field(None, example=True)
     input_shape: Optional[List[int]] = Field(None, example=[1, 3, 480, 480])
@@ -262,7 +262,7 @@ class ModelFiles(BaseModel):
     )
     pytorch_model: str = Field(..., example="/app/best.pt")
     current_backend: str = Field(..., example="openvino")
-    model_classes: int = Field(..., example=10)
+    model_classes: int = Field(..., example=4)  # Updated for best0408 model (4 classes)
     input_size: int = Field(..., example=480)
 
 
