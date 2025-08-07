@@ -3,19 +3,24 @@ Pydantic models for API request/response validation and documentation
 """
 
 from typing import Dict, List, Optional, Any, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
+
+# Global model configuration to suppress warnings
+model_config = ConfigDict(protected_namespaces=())
 
 # Base response models
 class HealthResponse(BaseModel):
     """Health check response"""
+    model_config = model_config
 
     status: str = Field(..., example="healthy")
 
 
 class RootResponse(BaseModel):
     """Root endpoint response"""
+    model_config = model_config
 
     status: str = Field(..., example="ok")
     service: str = Field(..., example="hazard-detection-api")
@@ -38,6 +43,7 @@ class BoundingBox(BaseModel):
 
 class Detection(BaseModel):
     """Single detection result"""
+    model_config = model_config
 
     bbox: List[float] = Field(
         ...,
