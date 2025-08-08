@@ -1,0 +1,108 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Testing and coverage
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Model files (large)
+*.pt
+*.onnx
+*.bin
+*.xml
+models/
+checkpoints/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
+.env.local
+.env.development
+.env.test
+.env.production
+
+# FastAPI/Uvicorn
+.uvicorn.pid
+
+# Docker
+.dockerignore
+
+# Railway
+railway.json
+
+# Cloudinary uploads
+uploads/
+
+# Performance monitoring
+performance_logs/
+
+# Security reports
+bandit-report.json
+safety-report.json
+semgrep-report.json
