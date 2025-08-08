@@ -767,6 +767,58 @@ class ModelService:
             )
 
         return info
+    
+    def get_health_status(self) -> Dict[str, Any]:
+        """
+        Get model health status for /ready endpoint (B2 requirement)
+        Confirms input size 480x480 and class names mapping
+        """
+        if not self.is_loaded:
+            return {
+                "status": "not_loaded",
+                "model_loaded": False,
+                "error": "Model not loaded"
+            }
+        
+        try:
+            # Verify class mapping: {0: crack, 1: knocked, 2: pothole, 3: surface damage}
+            expected_classes = ["crack", "knocked", "pothole", "surface damage"]
+            classes_valid = (
+                len(model_config.class_names) == 4 and 
+                model_config.class_names == expected_classes
+            )
+            
+            # Verify input size is 480x480
+            input_size_valid = settings.model_input_size == 480
+            if self.backend == "openvino" and self.input_layer:
+                # Check actual model input shape
+                input_shape = list(self.input_layer.shape)
+                input_size_valid = (
+                    len(input_shape) == 4 and 
+                    input_shape[2] == 480 and 
+                    input_shape[3] == 480
+                )
+            
+            return {
+                "status": "healthy" if (classes_valid and input_size_valid) else "misconfigured",
+                "model_loaded": True,
+                "backend": self.backend,
+                "input_size": settings.model_input_size,
+                "input_size_valid": input_size_valid,
+                "classes": model_config.class_names,
+                "classes_valid": classes_valid,
+                "expected_classes": expected_classes,
+                "device": getattr(settings, 'openvino_device', 'N/A') if self.backend == "openvino" else 'N/A',
+                "confidence_threshold": settings.confidence_threshold,
+                "iou_threshold": settings.iou_threshold
+            }
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "model_loaded": True,
+                "error": str(e)
+            }
 
 
 # Global model service instance
