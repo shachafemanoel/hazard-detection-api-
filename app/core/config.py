@@ -24,10 +24,11 @@ class Settings(BaseSettings):
 
     # Model configuration
     model_dir: str = Field(default="/app", env="MODEL_DIR")
-    model_backend: Literal["auto", "openvino", "pytorch"] = Field(
-        default="auto", env="MODEL_BACKEND"
+    model_path: Optional[str] = Field(default=None, env="MODEL_PATH")  # Explicit model path (e.g., /app/best0608.onnx)
+    model_backend: Literal["auto", "openvino"] = Field(
+        default="openvino", env="MODEL_BACKEND"  # OpenVINO ONLY for server inference
     )
-    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0408 model requirements
+    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0608 model requirements
 
     # OpenVINO settings
     openvino_device: str = Field(default="AUTO", env="OPENVINO_DEVICE")
@@ -104,37 +105,73 @@ class ModelConfig:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.base_dir = Path(settings.model_dir)
+        self._loaded_model_path: Optional[Path] = None
+
+    def set_loaded_model_path(self, model_path: Path) -> None:
+        """Set the path of the currently loaded model"""
+        self._loaded_model_path = model_path
+
+    @property
+    def loaded_model_name(self) -> str:
+        """Get the name of the currently loaded model"""
+        if self._loaded_model_path:
+            if "best0608" in str(self._loaded_model_path):
+                return "best0608"
+            elif "best0408" in str(self._loaded_model_path):
+                return "best0408"
+            else:
+                return self._loaded_model_path.stem
+        return "unknown"
 
     @property
     def class_names(self) -> List[str]:
-        """YOLO class names for hazard detection (best0408 model)"""
+        """YOLO class names for hazard detection (best0608 model - 6 classes)"""
         return [
             "crack",           # 0: General crack damage
             "knocked",         # 1: Knocked/damaged surface  
             "pothole",         # 2: Pothole damage
             "surface damage",  # 3: Surface damage
+            "longitudinal crack", # 4: Longitudinal crack
+            "alligator crack"  # 5: Alligator crack
         ]
 
     @property
     def openvino_model_paths(self) -> List[Path]:
         """Potential OpenVINO model file paths (prioritized by preference)"""
-        return [
-            # Primary model (best0408 - 4 classes)
+        paths = []
+        
+        # If MODEL_PATH is explicitly set, prioritize it
+        if self.settings.model_path:
+            paths.append(Path(self.settings.model_path))
+        
+        # Default search paths
+        paths.extend([
+            # Primary model (best0608 - 6 classes) - TARGET MODEL
+            self.base_dir / "best0608.onnx",
+            self.base_dir / "best0608_openvino_model" / "best0608.xml",
+            
+            # Fallback to current model (best0408 - 4 classes)
             self.base_dir / "best0408_openvino_model" / "best0408.xml",
             
-            # Legacy models (fallback)
+            # Legacy models (further fallback)
             self.base_dir / "best_openvino_model" / "last_model_train12052025.xml",
             self.base_dir / "best_openvino_model" / "best.xml",
             self.base_dir / "last_model_train12052025.xml",
             self.base_dir / "best.xml",
             self.base_dir / "openvino" / "best.xml",
             self.base_dir / "model.xml",
-        ]
+        ])
+        
+        return paths
 
     @property
     def pytorch_model_paths(self) -> List[Path]:
         """Potential PyTorch model file paths"""
         return [
+            # Target best0608 PyTorch model
+            self.base_dir / "best0608.pt",
+            
+            # Current and legacy models
             self.base_dir / "best.pt",
             self.base_dir / "pytorch" / "best.pt",
             self.base_dir / "models" / "best.pt",
