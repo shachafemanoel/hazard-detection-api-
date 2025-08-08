@@ -99,37 +99,25 @@ class ModelService:
         self._opencv_disabled = os.getenv('DISABLE_OPENCV', 'false').lower() == 'true'
 
     async def load_model(self) -> bool:
-        """Load model with intelligent backend selection"""
+        """Load model with OpenVINO backend only"""
         if self.is_loaded:
             return True
 
         self._load_start_time = time.time()
-        logger.info("🚀 Starting intelligent model loading...")
-        logger.info(f"🎯 Selected backend: {settings.model_backend}")
+        logger.info("🚀 Starting OpenVINO model loading...")
+        logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
         logger.info(f"📁 Model directory: {settings.model_dir}")
+        
+        if settings.model_path:
+            logger.info(f"🎯 Target model: {settings.model_path}")
 
-        # Try loading based on backend preference
-        if settings.model_backend in ["openvino", "auto"]:
-            if await self._try_load_openvino():
-                return True
-            elif settings.model_backend == "openvino":
-                raise ModelLoadingException(
-                    "OpenVINO backend requested but loading failed"
-                )
-
-        if settings.model_backend in ["pytorch", "auto"]:
-            if await self._try_load_pytorch():
-                return True
-            elif settings.model_backend == "pytorch":
-                raise ModelLoadingException(
-                    "PyTorch backend requested but loading failed"
-                )
-
-        # Try fallback locations
-        await self._try_fallback_locations()
-
-        if not self.is_loaded:
-            raise ModelLoadingException("All model loading attempts failed")
+        # OpenVINO ONLY for server inference - HARD RULE
+        if await self._try_load_openvino():
+            return True
+        else:
+            raise ModelLoadingException(
+                "OpenVINO model loading failed - server requires OpenVINO backend only"
+            )
 
         return True
 
@@ -170,17 +158,27 @@ class ModelService:
                     break
 
             if not model_path:
-                logger.info("No OpenVINO model files (.xml) found")
+                logger.info("No OpenVINO model files (.xml/.onnx) found")
                 return False
 
-            # Verify .bin file exists
-            bin_path = model_path.with_suffix(".bin")
-            if not bin_path.exists():
-                logger.warning(f"Missing .bin file: {bin_path}")
+            # For .xml files, verify .bin file exists
+            if model_path.suffix == ".xml":
+                bin_path = model_path.with_suffix(".bin")
+                if not bin_path.exists():
+                    logger.warning(f"Missing .bin file: {bin_path}")
+                    return False
+            elif model_path.suffix == ".onnx":
+                logger.info("Loading ONNX model directly with OpenVINO")
+            else:
+                logger.warning(f"Unsupported model format: {model_path.suffix}")
                 return False
 
             # Load and configure model
+            logger.info(f"📄 Loading model from: {model_path}")
             model = core.read_model(model=str(model_path))
+            
+            # Track loaded model path
+            model_config.set_loaded_model_path(model_path)
 
             # Handle dynamic shapes
             input_info = model.inputs[0]
@@ -751,8 +749,10 @@ class ModelService:
         info = {
             "status": "loaded",
             "backend": self.backend,
+            "model_name": model_config.loaded_model_name,
             "classes": model_config.class_names,
             "class_count": len(model_config.class_names),
+            "model_path": str(model_config._loaded_model_path) if model_config._loaded_model_path else "unknown",
         }
 
         if self.backend == "openvino":
@@ -781,11 +781,19 @@ class ModelService:
             }
         
         try:
-            # Verify class mapping: {0: crack, 1: knocked, 2: pothole, 3: surface damage}
-            expected_classes = ["crack", "knocked", "pothole", "surface damage"]
+            # Verify class mapping for best0608 (6 classes) or best0408 (4 classes)
+            model_name = model_config.loaded_model_name
+            if model_name == "best0608":
+                expected_classes = ["crack", "knocked", "pothole", "surface damage", "longitudinal crack", "alligator crack"]
+                expected_count = 6
+            else:
+                # Fallback to best0408 classes
+                expected_classes = ["crack", "knocked", "pothole", "surface damage"]
+                expected_count = 4
+                
             classes_valid = (
-                len(model_config.class_names) == 4 and 
-                model_config.class_names == expected_classes
+                len(model_config.class_names) == expected_count and
+                model_config.class_names[:expected_count] == expected_classes[:expected_count]
             )
             
             # Verify input size is 480x480
