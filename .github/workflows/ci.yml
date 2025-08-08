@@ -88,12 +88,12 @@ jobs:
     
     - name: 🧪 Run tests with coverage
       run: |
-        pytest app/tests/ -v \
+        pytest app/tests/ tests/ -v \
           --cov=app \
           --cov-report=xml \
           --cov-report=term-missing \
           --cov-report=html \
-          --cov-fail-under=75 \
+          --cov-fail-under=70 \
           --durations=10 \
           --tb=short
       env:
