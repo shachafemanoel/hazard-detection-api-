@@ -88,11 +88,16 @@ app.include_router(reports.router)
 app.include_router(external_apis.router)
 
 
-# Add request logging and performance monitoring middleware
+# Add structured request logging and performance monitoring middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log incoming requests and track performance metrics"""
+    """Log incoming requests with structured logging and track performance metrics"""
+    import uuid
     start_time = __import__("time").time()
+    
+    # Generate request ID for correlation
+    request_id = str(uuid.uuid4())[:8]
+    request.state.request_id = request_id
 
     response = await call_next(request)
 
@@ -104,11 +109,23 @@ async def log_requests(request: Request, call_next):
         endpoint=request.url.path, duration=process_time, success=success
     )
 
+    # Structured logging with request ID and timing (Agent G requirement)
     logger.info(
-        f"{request.method} {request.url.path} - "
-        f"Status: {response.status_code} - "
-        f"Time: {process_time:.3f}s"
+        f"REQUEST_COMPLETED",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round(process_time * 1000, 2),
+            "success": success,
+            "user_agent": request.headers.get("user-agent", "unknown"),
+            "client_ip": request.client.host if request.client else "unknown"
+        }
     )
+
+    # Add request ID to response headers for debugging
+    response.headers["X-Request-ID"] = request_id
 
     return response
 
