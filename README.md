@@ -270,7 +270,7 @@ curl -X POST http://localhost:8080/detect/$SESSION_ID \
 curl http://localhost:8080/session/$SESSION_ID/summary | jq
 ```
 
-See [CLIENT_README.md](CLIENT_README.md) for a comprehensive client integration guide, including base64 uploads and JavaScript examples.
+See [CLIENT_GUIDE.md](CLIENT_GUIDE.md) for a comprehensive client integration guide, including base64 uploads and JavaScript examples.
 
 ## 🚀 Development
 

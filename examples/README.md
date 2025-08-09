@@ -1,6 +1,7 @@
 # Node.js Examples for OpenVINO Hazard Detection API
 
 This directory contains practical examples showing how to integrate with the OpenVINO-powered hazard detection API running at `https://hazard-api-production-production.up.railway.app`.
+For a full walkthrough of client workflows, see the [Client Guide](../CLIENT_GUIDE.md).
 
 ## 🚀 Quick Setup
 
@@ -15,7 +16,7 @@ npm install axios form-data chokidar
 ## 📁 Examples Overview
 
 ### 1. Quick Start (`quickStart.js`)
-Simple single-image detection example - perfect for testing connectivity.
+Simple single-image detection example that logs bounding box coordinates, center, and size.
 
 ```bash
 npm run quick-start

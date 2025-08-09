@@ -2,6 +2,8 @@
 
 This guide explains how to use the Hazard Detection API to perform real-time monitoring of a stream of images.
 
+For an overview of client requests and response parsing, start with the [Client Guide](CLIENT_GUIDE.md).
+
 The API does not use WebSockets for real-time streaming. Instead, it supports a polling-based approach where a client-side script can watch a directory for new images and send them to the API for processing as they arrive. This is a simple and effective way to achieve real-time monitoring without the complexity of WebSockets.
 
 This guide is based on the `examples/realTimeMonitoring.js` script in this repository.

@@ -2,6 +2,8 @@
 
 This comprehensive guide shows you how to interact with the Hazard Detection API using JavaScript `fetch()`, `curl`, and other HTTP clients.
 
+For a step-by-step walkthrough of common client workflows, see the [Client Guide](CLIENT_GUIDE.md).
+
 ## 🌍 Base URLs
 
 ```javascript
