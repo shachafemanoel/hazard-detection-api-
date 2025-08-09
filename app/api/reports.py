@@ -2,10 +2,11 @@
 Report API endpoints for hazard detection reports
 """
 
+import asyncio
 import time
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
