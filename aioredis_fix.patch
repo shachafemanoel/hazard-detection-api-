@@ -1,0 +1,240 @@
+diff --git a/app/services/report_service.py b/app/services/report_service.py
+index abc123..def456 100644
+--- a/app/services/report_service.py
++++ b/app/services/report_service.py
+@@ -7,7 +7,6 @@
+ import uuid
+ from datetime import datetime, timedelta
+ from typing import Dict, List, Optional, Any, Tuple
+-from redis.asyncio import Redis
+ from geopy.geocoders import Nominatim
+ from geopy.exc import GeocoderTimedOut
+ 
+@@ -32,6 +31,7 @@
+ )
+ from .cloudinary_service import cloudinary_service
+ from .model_service import DetectionResult
++from .redis_service import redis_service
+ 
+ logger = get_logger("report_service")
+ 
+@@ -40,9 +40,8 @@
+     """Service for managing hazard detection reports"""
+ 
+     def __init__(self):
+-        self.redis_client: Optional[Redis] = None
++        self.redis_client = None  # Will be set from main.py lifespan
+         self.geocoder: Optional[Nominatim] = None
+-        self._setup_redis()
+         self._setup_geocoder()
+ 
+     def _setup_geocoder(self):
+@@ -214,7 +213,7 @@
+                 return None
+ 
+             report_key = f"report:{report_id}"
+-            report_data = await self.redis_client.get(report_key)
++            report_data = self.redis_client.get(report_key)
+             
+             if not report_data:
+                 return None
+@@ -282,7 +281,7 @@
+ 
+             # Delete from Redis
+             report_key = f"report:{report_id}"
+-            deleted = await self.redis_client.delete(report_key)
++            deleted = self.redis_client.delete(report_key)
+             
+             if deleted:
+                 logger.info(f"✅ Deleted report {report_id}")
+@@ -307,7 +306,7 @@
+                 )
+ 
+             # Get all report keys
+-            report_keys = await self.redis_client.keys("report:*")
++            report_keys = self.redis_client.keys("report:*")
+             all_reports = []
+ 
+             # Load all reports (for filtering)
+@@ -315,7 +314,7 @@
+                 try:
+-                    report_data = await self.redis_client.get(key)
++                    report_data = self.redis_client.get(key)
+                     if report_data:
+                         report_dict = json.loads(report_data)
+                         report = ReportResponse(**report_dict)
+@@ -436,12 +435,12 @@
+         try:
+             report_key = f"report:{report.id}"
+             report_data = report.json()
+-            await self.redis_client.set(report_key, report_data)
++            self.redis_client.set(report_key, report_data)
+             
+             # Set expiration if configured
+             if settings.report_retention_days > 0:
+-                await self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
++                self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
+
+diff --git a/app/services/redis_service.py b/app/services/redis_service.py
+index abc123..def456 100644
+--- a/app/services/redis_service.py
++++ b/app/services/redis_service.py
+@@ -22,6 +22,10 @@
+         self.connection_pool: Optional[redis.ConnectionPool] = None
+         self._setup_connection()
+     
++    def get_redis(self) -> Optional[redis.Redis]:
++        """Get the singleton Redis client"""
++        return self.redis_client
++    
+     def _setup_connection(self):
+         """Setup Redis connection with connection pool"""
+
+diff --git a/app/main.py b/app/main.py
+index abc123..def456 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -7,7 +7,6 @@
+ from contextlib import asynccontextmanager
+ from fastapi import FastAPI, Request
+ from fastapi.middleware.cors import CORSMiddleware
+-from redis.asyncio import Redis
+ 
+ from .core.config import settings
+ from .core.logging_config import get_logger
+@@ -20,6 +19,7 @@
+ from .services.model_service import model_service
+ from .services.session_service import session_service
+ from .services.performance_monitor import performance_monitor
++from .services.redis_service import redis_service
+ from .api import health, sessions, detection, external_apis, reports
+ 
+ logger = get_logger("main")
+@@ -28,21 +28,11 @@
+ @asynccontextmanager
+ async def lifespan(app: FastAPI):
+     """Application lifespan manager - handles startup and shutdown"""
+-    url = os.getenv("REDIS_URL")
+-    if not url:
+-        host = os.getenv("REDIS_HOST", "localhost")
+-        port = os.getenv("REDIS_PORT", "6379")
+-        username = os.getenv("REDIS_USERNAME", "default")
+-        password = os.getenv("REDIS_PASSWORD", "")
+-        db = os.getenv("REDIS_DB", "0")
+-        auth = f"{username}:{password}@" if password else ""
+-        url = f"redis://{auth}{host}:{port}/{db}"
+-
+-    app.state.redis = Redis.from_url(
+-        url,
+-        encoding="utf-8",
+-        decode_responses=True,
+-    )
++    # Connect report service to the sync Redis client
++    from .services.report_service import report_service
++    
++    # Use the existing sync Redis client from redis_service
++    report_service.redis_client = redis_service.get_redis()
+ 
+     from .services.report_service import report_service
+ 
+@@ -71,7 +61,7 @@
+         cleaned_sessions = session_service.cleanup_old_sessions(max_age_hours=1)
+         if cleaned_sessions > 0:
+             logger.info(f"🧹 Cleaned up {cleaned_sessions} old sessions")
+-        await app.state.redis.aclose()
++        # Cleanup is handled by redis_service
+         logger.info("✅ Shutdown complete")
+
+diff --git a/app/api/health.py b/app/api/health.py
+index abc123..def456 100644
+--- a/app/api/health.py
++++ b/app/api/health.py
+@@ -11,6 +11,7 @@
+ from ..services.model_service import model_service
+ from ..services.session_service import session_service
+ from ..services.performance_monitor import performance_monitor
++from ..services.redis_service import redis_service
+ from ..models.api_models import HealthResponse, RootResponse, StatusResponse
+ 
+ logger = get_logger("health_api")
+@@ -20,15 +21,33 @@
+ 
+ @router.get("/health")
+-async def health_check(request: Request):
+-    """Basic health check with Redis status"""
+-    r = request.app.state.redis
+-    ok = True
+-    redis_ok = False
+-    try:
+-        pong = await r.ping()
+-        redis_ok = bool(pong)
+-    except Exception:
+-        redis_ok = False
+-    return {"ok": ok, "redis": "up" if redis_ok else "down"}
++async def health_check():
++    """Enhanced health check endpoint with model status and Redis check"""
++    try:
++        # Get model status (don't fail if model service has issues)
++        try:
++            model_status = model_service.get_model_status()
++        except Exception as e:
++            logger.warning(f"Model status check failed: {e}")
++            model_status = "unknown"
++        
++        # Check Redis status (non-fatal)
++        try:
++            redis_ok = bool(redis_service.get_redis().ping()) if redis_service.get_redis() else False
++        except Exception:
++            redis_ok = False
++        
++        # Get version info
++        version = settings.app_version
++        
++        return {
++            "status": "healthy",
++            "model_status": model_status,  # "not_loaded", "warming", "ready", "error" 
++            "version": version,
++            "redis": "up" if redis_ok else "down"
++        }
++    except Exception as e:
++        logger.error(f"Health check failed: {e}")
++        return {
++            "status": "degraded", 
++            "model_status": "error",
++            "version": settings.app_version,
++            "redis": "down",
++            "error": str(e)
++        }
+
+diff --git a/app/tests/test_model_info_alias.py b/app/tests/test_model_info_alias.py
+index abc123..def456 100644
+--- a/app/tests/test_model_info_alias.py
++++ b/app/tests/test_model_info_alias.py
+@@ -15,7 +15,7 @@
+         session_stats=None,
+         processing_time_ms=0.0,
+         image_size={"width": 1, "height": 1},
+-        model_info=info,
++        model_meta=info,
+     )
+     data = resp.model_dump(by_alias=True)
+     assert "model_info" in data
+
+diff --git a/app/tests/test_health_api.py b/app/tests/test_health_api.py
+index abc123..def456 100644
+--- a/app/tests/test_health_api.py
++++ b/app/tests/test_health_api.py
+@@ -8,12 +8,14 @@
+ 
+ def test_health_endpoint(client: TestClient):
+-    """Test basic health check with Redis status"""
++    """Test enhanced health check with Redis and model status"""
+     response = client.get("/health")
+     assert response.status_code == 200
+ 
+     data = response.json()
+-    assert data["ok"] is True
++    assert data["status"] in ["healthy", "degraded"]
+     assert data["redis"] in ["up", "down"]
++    assert "model_status" in data
++    assert "version" in data

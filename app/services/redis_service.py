@@ -22,6 +22,10 @@ class RedisService:
         self.connection_pool: Optional[redis.ConnectionPool] = None
         self._setup_connection()
     
+    def get_redis(self) -> Optional[redis.Redis]:
+        """Get the singleton Redis client"""
+        return self.redis_client
+    
     def _setup_connection(self):
         """Setup Redis connection with connection pool"""
         try:

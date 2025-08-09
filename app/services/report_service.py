@@ -7,7 +7,6 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
-from redis.asyncio import Redis
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 
@@ -30,6 +29,7 @@ from ..models.report_models import (
 )
 from .cloudinary_service import cloudinary_service
 from .model_service import DetectionResult
+from .redis_service import redis_service
 
 logger = get_logger("report_service")
 
@@ -38,7 +38,7 @@ class ReportService:
     """Service for managing hazard detection reports"""
 
     def __init__(self):
-        self.redis_client: Optional[Redis] = None
+        self.redis_client = None  # Will be set from main.py lifespan
         self.geocoder: Optional[Nominatim] = None
         self._setup_geocoder()
 
@@ -206,7 +206,7 @@ class ReportService:
                 return None
 
             report_key = f"report:{report_id}"
-            report_data = await self.redis_client.get(report_key)
+            report_data = self.redis_client.get(report_key)
             
             if not report_data:
                 return None
@@ -274,7 +274,7 @@ class ReportService:
 
             # Delete from Redis
             report_key = f"report:{report_id}"
-            deleted = await self.redis_client.delete(report_key)
+            deleted = self.redis_client.delete(report_key)
             
             if deleted:
                 logger.info(f"✅ Deleted report {report_id}")
@@ -299,13 +299,13 @@ class ReportService:
                 )
 
             # Get all report keys
-            report_keys = await self.redis_client.keys("report:*")
+            report_keys = self.redis_client.keys("report:*")
             all_reports = []
 
             # Load all reports (for filtering)
             for key in report_keys:
                 try:
-                    report_data = await self.redis_client.get(key)
+                    report_data = self.redis_client.get(key)
                     if report_data:
                         report_dict = json.loads(report_data)
                         report = ReportResponse(**report_dict)
@@ -428,11 +428,11 @@ class ReportService:
         try:
             report_key = f"report:{report.id}"
             report_data = report.json()
-            await self.redis_client.set(report_key, report_data)
+            self.redis_client.set(report_key, report_data)
             
             # Set expiration if configured
             if settings.report_retention_days > 0:
-                await self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
+                self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
 
         except Exception as e:
             logger.error(f"❌ Failed to store report in Redis: {e}")
@@ -456,24 +456,27 @@ class ReportService:
             return None
 
     def _determine_severity(self, detection: DetectionResult) -> HazardSeverity:
-        """Determine hazard severity based on detection confidence and class"""
-        # High-risk hazard types
-        critical_hazards = ["Pothole", "Block Crack", "Alligator Crack"]
-        high_hazards = ["Transverse Crack", "Longitudinal Crack"]
+        """Determine hazard severity based on detection confidence and class (YOLOv12n: crack, pothole)"""
+        class_name = detection.class_name.lower()
+        confidence = detection.confidence
         
-        if detection.class_name in critical_hazards:
-            if detection.confidence >= 0.8:
+        # YOLOv12n classification: pothole is more critical than crack
+        if class_name == "pothole":
+            if confidence >= 0.85:
                 return HazardSeverity.CRITICAL
-            elif detection.confidence >= 0.7:
+            elif confidence >= 0.7:
                 return HazardSeverity.HIGH
             else:
                 return HazardSeverity.MEDIUM
-        elif detection.class_name in high_hazards:
-            if detection.confidence >= 0.8:
+        elif class_name == "crack":
+            if confidence >= 0.9:
                 return HazardSeverity.HIGH
-            else:
+            elif confidence >= 0.7:
                 return HazardSeverity.MEDIUM
+            else:
+                return HazardSeverity.LOW
         else:
+            # Fallback for unknown classes
             return HazardSeverity.LOW
 
     def _apply_filters(self, reports: List[ReportResponse], filters: ReportFilterRequest) -> List[ReportResponse]:
