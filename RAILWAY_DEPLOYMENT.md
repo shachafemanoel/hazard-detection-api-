@@ -2,6 +2,8 @@
 
 This guide covers deploying the Hazard Detection API to Railway and integrating it with other services.
 
+For how clients can consume the deployed API, refer to the [Client Guide](CLIENT_GUIDE.md).
+
 ## 🚀 Quick Railway Deployment
 
 ### 1. Prerequisites

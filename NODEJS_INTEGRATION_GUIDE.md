@@ -4,6 +4,8 @@
 
 This guide shows how external Node.js services can integrate with your OpenVINO-powered hazard detection API running at `https://hazard-api-production-production.up.railway.app`.
 
+For general client usage and response handling, start with the [Client Guide](CLIENT_GUIDE.md).
+
 ## 📋 Table of Contents
 
 1. [API Overview](#api-overview)

@@ -2,6 +2,8 @@
 
 ## ✅ Complete B1-B5 Implementation
 
+For instructions on consuming the API from external services, see the [Client Guide](CLIENT_GUIDE.md).
+
 ### B1. Structure & Config ✅
 - **Clean app layout**: `app/main_b3.py`, `app/routers/`, `app/services/`, `app/models/schemas.py`, `app/core/config.py`
 - **Environment validation**: All required vars validated on startup (REDIS_*, CLOUDINARY_*, ALLOWED_ORIGINS, MODEL_PATH)
