@@ -15,7 +15,7 @@ def test_model_info_alias_serialization():
         session_stats=None,
         processing_time_ms=0.0,
         image_size={"width": 1, "height": 1},
-        model_info=info,
+        model_meta=info,
     )
     data = resp.model_dump(by_alias=True)
     assert "model_info" in data

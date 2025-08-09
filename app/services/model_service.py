@@ -265,19 +265,17 @@ class ModelService:
             os.environ["YOLO_VERBOSE"] = "False"
             self.model = YOLO(str(model_path))
 
-            # Override model class names to match best0408 configuration
+            # Override model class names to match YOLOv12n configuration (2 classes)
             # This ensures consistency between OpenVINO and PyTorch backends
-            if hasattr(self.model, 'names') and len(self.model.names) == 4:
-                logger.info("🔧 Overriding PyTorch model class names to match best0408 configuration")
+            if hasattr(self.model, 'names') and len(self.model.names) == 2:
+                logger.info("🔧 Overriding PyTorch model class names to match YOLOv12n configuration")
                 self.model.names = {
                     0: "crack",
-                    1: "knocked", 
-                    2: "pothole",
-                    3: "surface damage"
+                    1: "pothole"
                 }
                 logger.info(f"📝 Updated class names: {list(self.model.names.values())}")
             else:
-                logger.warning(f"⚠️ PyTorch model has {len(getattr(self.model, 'names', {}))} classes, expected 4")
+                logger.warning(f"⚠️ PyTorch model has {len(getattr(self.model, 'names', {}))} classes, expected 2")
 
             # Mark as loaded
             self.backend = "pytorch"
@@ -867,8 +865,8 @@ class ModelService:
     
     def get_health_status(self) -> Dict[str, Any]:
         """
-        Get model health status for /ready endpoint (B2 requirement)
-        Confirms input size 480x480 and class names mapping
+        Get model health status for /ready endpoint
+        Confirms input size 640x640 and YOLOv12n class names mapping (2 classes: crack, pothole)
         """
         if not self.is_loaded:
             return {
@@ -878,30 +876,24 @@ class ModelService:
             }
         
         try:
-            # Verify class mapping for best0608 (6 classes) or best0408 (4 classes)
-            model_name = model_config.loaded_model_name
-            if model_name == "best0608":
-                expected_classes = ["crack", "knocked", "pothole", "surface damage", "longitudinal crack", "alligator crack"]
-                expected_count = 6
-            else:
-                # Fallback to best0408 classes
-                expected_classes = ["crack", "knocked", "pothole", "surface damage"]
-                expected_count = 4
+            # Verify class mapping for YOLOv12n model (2 classes)
+            expected_classes = ["crack", "pothole"]
+            expected_count = 2
                 
             classes_valid = (
                 len(model_config.class_names) == expected_count and
                 model_config.class_names[:expected_count] == expected_classes[:expected_count]
             )
             
-            # Verify input size is 480x480
-            input_size_valid = settings.ml_model_input_size == 480
+            # Verify input size is 640x640 for YOLOv12n
+            input_size_valid = settings.ml_model_input_size == 640
             if self.backend == "openvino" and self.input_layer:
                 # Check actual model input shape
                 input_shape = list(self.input_layer.shape)
                 input_size_valid = (
                     len(input_shape) == 4 and 
-                    input_shape[2] == 480 and 
-                    input_shape[3] == 480
+                    input_shape[2] == 640 and 
+                    input_shape[3] == 640
                 )
             
             return {

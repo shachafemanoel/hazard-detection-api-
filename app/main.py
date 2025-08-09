@@ -7,7 +7,6 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
 
 from .core.config import settings
 from .core.logging_config import get_logger
@@ -20,6 +19,7 @@ from .core.exceptions import (
 from .services.model_service import model_service
 from .services.session_service import session_service
 from .services.performance_monitor import performance_monitor
+from .services.redis_service import redis_service
 from .api import health, sessions, detection, external_apis, reports
 
 logger = get_logger("main")
@@ -28,25 +28,11 @@ logger = get_logger("main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown"""
-    url = os.getenv("REDIS_URL")
-    if not url:
-        host = os.getenv("REDIS_HOST", "localhost")
-        port = os.getenv("REDIS_PORT", "6379")
-        username = os.getenv("REDIS_USERNAME", "default")
-        password = os.getenv("REDIS_PASSWORD", "")
-        db = os.getenv("REDIS_DB", "0")
-        auth = f"{username}:{password}@" if password else ""
-        url = f"redis://{auth}{host}:{port}/{db}"
-
-    app.state.redis = Redis.from_url(
-        url,
-        encoding="utf-8",
-        decode_responses=True,
-    )
-
+    # Connect report service to the sync Redis client
     from .services.report_service import report_service
-
-    report_service.redis_client = app.state.redis
+    
+    # Use the existing sync Redis client from redis_service
+    report_service.redis_client = redis_service.get_redis()
 
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"🌍 Environment: {settings.environment}")
@@ -70,7 +56,7 @@ async def lifespan(app: FastAPI):
         cleaned_sessions = session_service.cleanup_old_sessions(max_age_hours=1)
         if cleaned_sessions > 0:
             logger.info(f"🧹 Cleaned up {cleaned_sessions} old sessions")
-        await app.state.redis.aclose()
+        # Cleanup is handled by redis_service
         logger.info("✅ Shutdown complete")
 
 

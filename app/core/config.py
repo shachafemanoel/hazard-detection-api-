@@ -23,12 +23,12 @@ class Settings(BaseSettings):
     port: int = Field(default=8080, env="PORT")
 
     # Model configuration
-    ml_model_dir: str = Field(default="/app", env="MODEL_DIR")
-    ml_model_path: Optional[str] = Field(default=None, env="MODEL_PATH")  # Explicit model path (e.g., /app/best0608.onnx)
+    ml_model_dir: str = Field(default="/app/server", env="MODEL_DIR")
+    ml_model_path: Optional[str] = Field(default=None, env="MODEL_PATH")  # Explicit model path (e.g., /app/server/openvino_fp16/best.xml)
     ml_model_backend: Literal["auto", "openvino"] = Field(
         default="openvino", env="MODEL_BACKEND"  # OpenVINO ONLY for server inference
     )
-    ml_model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0608 model requirements
+    ml_model_input_size: int = Field(default=640, env="MODEL_INPUT_SIZE")  # Updated for YOLOv12n 640x640 input
 
     # OpenVINO settings
     openvino_device: str = Field(default="AUTO", env="OPENVINO_DEVICE")
@@ -129,14 +129,10 @@ class ModelConfig:
 
     @property
     def class_names(self) -> List[str]:
-        """YOLO class names for hazard detection (best0608 model - 6 classes)"""
+        """YOLO class names for hazard detection (YOLOv12n model - 2 classes)"""
         return [
-            "crack",           # 0: General crack damage
-            "knocked",         # 1: Knocked/damaged surface  
-            "pothole",         # 2: Pothole damage
-            "surface damage",  # 3: Surface damage
-            "longitudinal crack", # 4: Longitudinal crack
-            "alligator crack"  # 5: Alligator crack
+            "crack",    # 0: Crack damage (all types)
+            "pothole",  # 1: Pothole damage
         ]
 
     @property
@@ -148,22 +144,19 @@ class ModelConfig:
         if self.settings.ml_model_path:
             paths.append(Path(self.settings.ml_model_path))
         
-        # Default search paths
+        # Default search paths for YOLOv12n models
         paths.extend([
-            # Primary model (best0608 - 6 classes) - TARGET MODEL
-            self.base_dir / "best0608.onnx",
+            # Primary model (FP16 - faster inference) - RECOMMENDED
+            self.base_dir / "openvino_fp16" / "best.xml",
+            
+            # Secondary model (FP32 - higher precision)  
+            self.base_dir / "openvino_fp32" / "best.xml",
+            
+            # Legacy fallback paths (for backward compatibility)
             self.base_dir / "best0608_openvino_model" / "best0608.xml",
-            
-            # Fallback to current model (best0408 - 4 classes)
-            self.base_dir / "best0408_openvino_model" / "best0408.xml",
-            
-            # Legacy models (further fallback)
-            self.base_dir / "best_openvino_model" / "last_model_train12052025.xml",
+            self.base_dir / "best0408_openvino_model" / "best0408.xml", 
             self.base_dir / "best_openvino_model" / "best.xml",
-            self.base_dir / "last_model_train12052025.xml",
             self.base_dir / "best.xml",
-            self.base_dir / "openvino" / "best.xml",
-            self.base_dir / "model.xml",
         ])
         
         return paths

@@ -4,7 +4,7 @@ FROM python:3.11.9-slim AS builder
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies needed for building Python packages
+# Install system dependencies needed for building Python packages (includes OpenVINO build deps)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libfontconfig1 \
     libxrender1 \
+    libtbb12 \
+    libtbb-dev \
     curl \
     wget \
     && rm -rf /var/lib/apt/lists/* \
@@ -38,7 +40,7 @@ FROM python:3.11.9-slim AS runtime
 # Set working directory
 WORKDIR /app
 
-# Install runtime system dependencies
+# Install runtime system dependencies (includes OpenVINO dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libgl1-mesa-glx \
@@ -47,6 +49,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libfontconfig1 \
     libxrender1 \
+    libtbb12 \
+    libtbb-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -76,8 +80,9 @@ USER appuser
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    MODEL_DIR=/app \
+    MODEL_DIR=/app/server \
     MODEL_BACKEND=openvino \
+    MODEL_INPUT_SIZE=640 \
     PORT=8080 \
     HOST=0.0.0.0 \
     LOG_LEVEL=INFO \

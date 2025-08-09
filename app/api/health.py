@@ -11,6 +11,7 @@ from ..core.logging_config import get_logger
 from ..services.model_service import model_service
 from ..services.session_service import session_service
 from ..services.performance_monitor import performance_monitor
+from ..services.redis_service import redis_service
 from ..models.api_models import HealthResponse, RootResponse, StatusResponse
 
 logger = get_logger("health_api")
@@ -19,17 +20,40 @@ router = APIRouter(prefix="", tags=["health"])
 
 
 @router.get("/health")
-async def health_check(request: Request):
-    """Basic health check with Redis status"""
-    r = request.app.state.redis
-    ok = True
-    redis_ok = False
+async def health_check():
+    """Enhanced health check endpoint with model status and Redis check"""
     try:
-        pong = await r.ping()
-        redis_ok = bool(pong)
-    except Exception:
-        redis_ok = False
-    return {"ok": ok, "redis": "up" if redis_ok else "down"}
+        # Get model status (don't fail if model service has issues)
+        try:
+            model_status = model_service.get_model_status()
+        except Exception as e:
+            logger.warning(f"Model status check failed: {e}")
+            model_status = "unknown"
+        
+        # Check Redis status (non-fatal)
+        try:
+            redis_ok = bool(redis_service.get_redis().ping()) if redis_service.get_redis() else False
+        except Exception:
+            redis_ok = False
+        
+        # Get version info
+        version = settings.app_version
+        
+        return {
+            "status": "healthy",
+            "model_status": model_status,  # "not_loaded", "warming", "ready", "error" 
+            "version": version,
+            "redis": "up" if redis_ok else "down"
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "degraded", 
+            "model_status": "error",
+            "version": settings.app_version,
+            "redis": "down",
+            "error": str(e)
+        }
 
 
 @router.options("/health", include_in_schema=False)
