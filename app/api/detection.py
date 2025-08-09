@@ -2,6 +2,7 @@
 Detection API endpoints for hazard detection
 """
 
+import asyncio
 import base64
 import time
 from typing import Dict, List, Any, Optional
@@ -30,6 +31,24 @@ class Base64DetectionRequest(BaseModel):
     image: str  # Base64 encoded image
     confidence_threshold: Optional[float] = 0.5
     session_id: Optional[str] = None
+    timeout_ms: Optional[int] = 30000  # 30 second default timeout
+
+
+class DetectionResponse(BaseModel):
+    success: bool
+    detections: List[Dict[str, Any]]
+    processing_time_ms: float
+    image_size: Dict[str, int]
+    model_info: Dict[str, Any]
+    
+    
+class BatchDetectionResponse(BaseModel):
+    success: bool
+    results: List[Dict[str, Any]]
+    total_processing_time_ms: float
+    processed_count: int
+    successful_count: int
+    model_info: Dict[str, Any]
 
 
 @router.post("/detect/{session_id}")
@@ -150,8 +169,21 @@ async def detect_hazards_with_session(
         # Store original image data for reports (base64 encoded)
         image_base64 = base64.b64encode(contents).decode("utf-8")
 
-        # Run model inference
-        detections = await ms.predict(image)
+        # Run model inference with timeout
+        try:
+            detections = await asyncio.wait_for(
+                ms.predict(image), 
+                timeout=30.0  # 30 second timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail={
+                    "error": "inference_timeout",
+                    "message": "Model inference timed out after 30 seconds",
+                    "timeout_ms": 30000
+                }
+            )
 
         # Process detections with session tracking
         processing_result = await session_service.process_detections(
@@ -291,8 +323,21 @@ async def detect_hazards_json(detection_request: Base64DetectionRequest) -> Dict
                 else:
                     raise InvalidImageException(f"Failed to decode base64 image with both methods: Primary: {str(e)}, Fallback: {str(e2)}")
 
-        # Run model inference
-        detections = await ms.predict(image)
+        # Run model inference with timeout
+        try:
+            detections = await asyncio.wait_for(
+                ms.predict(image), 
+                timeout=detection_request.timeout_ms / 1000.0
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail={
+                    "error": "inference_timeout", 
+                    "message": f"Model inference timed out after {detection_request.timeout_ms}ms",
+                    "timeout_ms": detection_request.timeout_ms
+                }
+            )
 
         # Convert detections to frontend-compatible format
         frontend_detections = []
@@ -365,8 +410,21 @@ async def detect_hazards_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         except Exception as e:
             raise InvalidImageException(f"Failed to process image: {str(e)}")
 
-        # Run model inference
-        detections = await ms.predict(image)
+        # Run model inference with timeout
+        try:
+            detections = await asyncio.wait_for(
+                ms.predict(image), 
+                timeout=30.0  # 30 second timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail={
+                    "error": "inference_timeout",
+                    "message": "Model inference timed out after 30 seconds", 
+                    "timeout_ms": 30000
+                }
+            )
 
         # Convert detections to dictionary format
         detection_dicts = [detection.to_dict() for detection in detections]
@@ -431,8 +489,21 @@ async def detect_batch(files: List[UploadFile] = File(...)) -> Dict[str, Any]:
                 image_stream.seek(0)
                 image = Image.open(image_stream).convert("RGB")
 
-                # Run inference
-                detections = await ms.predict(image)
+                # Run inference with timeout
+                try:
+                    detections = await asyncio.wait_for(
+                        ms.predict(image), 
+                        timeout=30.0
+                    )
+                except asyncio.TimeoutError:
+                    results.append(
+                        {
+                            "file_index": i,
+                            "filename": file.filename,
+                            "error": "Model inference timed out after 30 seconds"
+                        }
+                    )
+                    continue
 
                 # Format results
                 detection_dicts = [detection.to_dict() for detection in detections]
