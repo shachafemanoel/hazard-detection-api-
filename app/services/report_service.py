@@ -40,44 +40,25 @@ class ReportService:
     def __init__(self):
         self.redis_client: Optional[aioredis.Redis] = None
         self.geocoder: Optional[Nominatim] = None
-        self._setup_redis()
+        # Don't setup Redis in __init__ - causes blocking issues in Railway
+        self._redis_setup_attempted = False
         self._setup_geocoder()
 
     def _setup_redis(self):
-        """Setup Redis connection for report storage"""
-        try:
-            if settings.redis_url:
-                self.redis_client = redis.from_url(settings.redis_url, decode_responses=True)
-            elif settings.redis_host and settings.redis_password:
-                self.redis_client = redis.Redis(
-                    host=settings.redis_host,
-                    port=settings.redis_port,
-                    username=settings.redis_username,
-                    password=settings.redis_password,
-                    db=settings.redis_db,
-                    decode_responses=True,
-                    socket_connect_timeout=10
-                )
-            
-            if self.redis_client:
-                # Test connection
-                self.redis_client.ping()
-                logger.info("✅ Redis connected for report storage")
-            else:
-                logger.warning("⚠️ Redis not configured for reports")
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to Redis: {e}")
-            self.redis_client = None
+        """Setup Redis connection for report storage (disabled during init to prevent blocking)"""
+        logger.info("🔄 Redis setup deferred to prevent blocking startup")
+        self.redis_client = None
 
     def _setup_geocoder(self):
-        """Setup geocoding service"""
+        """Setup geocoding service (lightweight, non-blocking)"""
         if settings.geocoding_enabled:
             try:
+                # Just create the geocoder object, don't test it
                 self.geocoder = Nominatim(user_agent="hazard-detection-api")
-                logger.info("✅ Geocoding service initialized")
+                logger.info("🔄 Geocoding service initialized (will test on first use)")
             except Exception as e:
-                logger.error(f"❌ Failed to setup geocoder: {e}")
+                logger.warning(f"⚠️ Geocoder setup issue (will retry on use): {e}")
+                self.geocoder = None
 
     async def create_report_from_detection(
         self,
