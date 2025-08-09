@@ -3,6 +3,7 @@ Model service for loading and managing OpenVINO and PyTorch models
 Handles intelligent backend selection and model operations
 """
 
+import asyncio
 import os
 import time
 from pathlib import Path
@@ -88,6 +89,7 @@ class ModelService:
 
     def __init__(self):
         self.is_loaded = False
+        self.model_status = "not_loaded"  # "not_loaded", "warming", "ready", "error"
         self.backend = None
         self.model = None
         self.compiled_model = None
@@ -95,31 +97,40 @@ class ModelService:
         self.output_layer = None
         self.infer_request = None
         self._load_start_time = None
+        self._warmup_completed = False
         # Disable OpenCV by default in problematic environments
         self._opencv_disabled = os.getenv('DISABLE_OPENCV', 'false').lower() == 'true'
 
     async def load_model(self) -> bool:
         """Load model with OpenVINO backend only"""
-        if self.is_loaded:
+        if self.is_loaded and self._warmup_completed:
             return True
 
-        self._load_start_time = time.time()
-        logger.info("🚀 Starting OpenVINO model loading...")
-        logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
-        logger.info(f"📁 Model directory: {settings.model_dir}")
-        
-        if settings.model_path:
-            logger.info(f"🎯 Target model: {settings.model_path}")
+        try:
+            self.model_status = "warming"
+            self._load_start_time = time.time()
+            logger.info("🚀 Starting OpenVINO model loading...")
+            logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
+            logger.info(f"📁 Model directory: {settings.model_dir}")
+            
+            if settings.model_path:
+                logger.info(f"🎯 Target model: {settings.model_path}")
 
-        # OpenVINO ONLY for server inference - HARD RULE
-        if await self._try_load_openvino():
-            return True
-        else:
-            raise ModelLoadingException(
-                "OpenVINO model loading failed - server requires OpenVINO backend only"
-            )
-
-        return True
+            # OpenVINO ONLY for server inference - HARD RULE
+            if await self._try_load_openvino():
+                # Perform warmup inference
+                await self._warmup_model()
+                self.model_status = "ready"
+                return True
+            else:
+                self.model_status = "error"
+                raise ModelLoadingException(
+                    "OpenVINO model loading failed - server requires OpenVINO backend only"
+                )
+        except Exception as e:
+            self.model_status = "error"
+            logger.error(f"Model loading failed: {e}")
+            raise
 
     async def _try_load_openvino(self) -> bool:
         """Try to load OpenVINO model"""
@@ -399,26 +410,36 @@ class ModelService:
             raise InferenceException(f"Inference failed: {str(e)}")
 
     async def _predict_openvino(self, image: Image.Image) -> List[DetectionResult]:
-        """Run OpenVINO inference"""
-        # Preprocess image
+        """Run OpenVINO inference with async offloading"""
+        # Preprocess image (CPU-bound - offload to thread)
         input_shape = list(self.input_layer.shape)
-        processed_image, scale, paste_x, paste_y = self._preprocess_image(
-            image, input_shape
+        
+        loop = asyncio.get_running_loop()
+        processed_image, scale, paste_x, paste_y = await loop.run_in_executor(
+            None, self._preprocess_image, image, input_shape
         )
 
-        # Run inference
+        # Run inference (CPU-bound - offload to thread)
         if settings.openvino_async_inference and self.infer_request:
-            self.infer_request.infer(
-                inputs={self.input_layer.any_name: processed_image}
-            )
-            result = self.infer_request.get_output_tensor(self.output_layer.index).data
+            def _run_inference():
+                self.infer_request.infer(
+                    inputs={self.input_layer.any_name: processed_image}
+                )
+                return self.infer_request.get_output_tensor(self.output_layer.index).data
+                
+            result = await loop.run_in_executor(None, _run_inference)
         else:
-            result = self.compiled_model({self.input_layer.any_name: processed_image})[
-                self.output_layer
-            ]
+            def _run_inference():
+                return self.compiled_model({self.input_layer.any_name: processed_image})[
+                    self.output_layer
+                ]
+            
+            result = await loop.run_in_executor(None, _run_inference)
 
-        # Postprocess results
-        return self._postprocess_predictions(
+        # Postprocess results (CPU-bound - offload to thread)
+        detections = await loop.run_in_executor(
+            None,
+            self._postprocess_predictions,
             result,
             image.width,
             image.height,
@@ -428,40 +449,49 @@ class ModelService:
             paste_x,
             paste_y,
         )
+        
+        return detections
 
     async def _predict_pytorch(self, image: Image.Image) -> List[DetectionResult]:
-        """Run PyTorch inference"""
-        results = self.model.predict(image, imgsz=settings.model_input_size)
-        detections = []
+        """Run PyTorch inference with async offloading"""
+        loop = asyncio.get_running_loop()
+        
+        # Offload CPU-bound PyTorch inference to thread pool
+        def _run_pytorch_inference():
+            results = self.model.predict(image, imgsz=settings.model_input_size)
+            detections = []
 
-        for r in results:
-            for box in r.boxes:
-                bbox = box.xyxy[0]
-                if hasattr(bbox, "tolist"):
-                    bbox = bbox.tolist()
-                x1, y1, x2, y2 = [float(x) for x in bbox]
+            for r in results:
+                for box in r.boxes:
+                    bbox = box.xyxy[0]
+                    if hasattr(bbox, "tolist"):
+                        bbox = bbox.tolist()
+                    x1, y1, x2, y2 = [float(x) for x in bbox]
 
-                conf_val = box.conf[0]
-                conf = (
-                    float(conf_val.item()) if hasattr(conf_val, "item") else float(conf_val)
-                )
-                cls_val = box.cls[0]
-                cls_id = int(cls_val.item()) if hasattr(cls_val, "item") else int(cls_val)
+                    conf_val = box.conf[0]
+                    conf = (
+                        float(conf_val.item()) if hasattr(conf_val, "item") else float(conf_val)
+                    )
+                    cls_val = box.cls[0]
+                    cls_id = int(cls_val.item()) if hasattr(cls_val, "item") else int(cls_val)
 
-                if cls_id < len(model_config.class_names):
-                    class_name = model_config.class_names[cls_id]
-                else:
-                    class_name = f"cls_{cls_id}"
+                    if cls_id < len(model_config.class_names):
+                        class_name = model_config.class_names[cls_id]
+                    else:
+                        class_name = f"cls_{cls_id}"
 
-                detection = DetectionResult(
-                    bbox=[x1, y1, x2, y2],
-                    confidence=conf,
-                    class_id=cls_id,
-                    class_name=class_name,
-                )
-                detections.append(detection)
+                    detection = DetectionResult(
+                        bbox=[x1, y1, x2, y2],
+                        confidence=conf,
+                        class_id=cls_id,
+                        class_name=class_name,
+                    )
+                    detections.append(detection)
 
-        return detections
+            return detections
+        
+        # Execute in thread pool to avoid blocking the event loop
+        return await loop.run_in_executor(None, _run_pytorch_inference)
 
     def _preprocess_image(
         self, image: Image.Image, input_shape: List[int]
@@ -784,6 +814,29 @@ class ModelService:
         union = area1 + area2 - intersection
 
         return intersection / union if union > 0 else 0.0
+
+    async def _warmup_model(self) -> None:
+        """Warmup the model with a dummy inference to ensure readiness"""
+        try:
+            logger.info("🔥 Warming up model...")
+            # Create a dummy image for warmup
+            dummy_image = Image.new('RGB', (settings.model_input_size, settings.model_input_size), color='black')
+            
+            # Run warmup inference
+            warmup_start = time.time()
+            _ = await self.predict(dummy_image)
+            warmup_time = time.time() - warmup_start
+            
+            self._warmup_completed = True
+            logger.info(f"✅ Model warmup completed in {warmup_time:.3f}s")
+        except Exception as e:
+            logger.warning(f"Model warmup failed (model may still work): {e}")
+            # Set as completed anyway since warmup failure doesn't mean the model won't work
+            self._warmup_completed = True
+
+    def get_model_status(self) -> str:
+        """Get the current model status"""
+        return self.model_status
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get model information"""
