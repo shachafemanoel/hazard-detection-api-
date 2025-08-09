@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Optional
 from io import BytesIO
 from PIL import Image
 from fastapi import APIRouter, UploadFile, File, HTTPException, Body
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
@@ -27,28 +27,36 @@ logger = get_logger("detection_api")
 router = APIRouter(tags=["detection"])
 
 
-class Base64DetectionRequest(BaseModel):
+class _APIBase(BaseModel):
+    model_config = {
+        "populate_by_name": True,
+        "from_attributes": True,
+        "protected_namespaces": ("__pydantic_",),
+    }
+
+
+class Base64DetectionRequest(_APIBase):
     image: str  # Base64 encoded image
     confidence_threshold: Optional[float] = 0.5
     session_id: Optional[str] = None
     timeout_ms: Optional[int] = 30000  # 30 second default timeout
 
 
-class DetectionResponse(BaseModel):
+class DetectionResponse(_APIBase):
     success: bool
     detections: List[Dict[str, Any]]
     processing_time_ms: float
     image_size: Dict[str, int]
-    model_info: Dict[str, Any]
+    model_meta: Dict[str, Any] = Field(alias="model_info")
     
     
-class BatchDetectionResponse(BaseModel):
+class BatchDetectionResponse(_APIBase):
     success: bool
     results: List[Dict[str, Any]]
     total_processing_time_ms: float
     processed_count: int
     successful_count: int
-    model_info: Dict[str, Any]
+    model_meta: Dict[str, Any] = Field(alias="model_info")
 
 
 @router.post("/detect/{session_id}")

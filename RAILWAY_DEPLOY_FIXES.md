@@ -5,7 +5,7 @@
 1. ✅ **FIXED**: Pydantic namespace warnings - Added `protected_namespaces=()` to config
 2. ✅ **FIXED**: OpenVINO version incompatibility - Updated to 2024.4.0 
 3. ✅ **FIXED**: User directory permissions - Fixed Dockerfile permissions
-4. ✅ **FIXED**: Async Redis blocking - Replaced with aioredis
+4. ✅ **FIXED**: Async Redis blocking - Replaced with redis asyncio client
 
 ## Key Changes Made
 
@@ -30,8 +30,8 @@ ml_model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")
 # Updated OpenVINO to latest LTS
 openvino==2024.4.0
 
-# Replaced synchronous Redis with async client  
-aioredis==2.0.1  # was: redis==5.0.1
+# Replaced synchronous Redis with async client
+redis>=5.0
 ```
 
 ### 3. Container Fixes (`Dockerfile`)
