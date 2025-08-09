@@ -23,12 +23,12 @@ class Settings(BaseSettings):
     port: int = Field(default=8080, env="PORT")
 
     # Model configuration
-    model_dir: str = Field(default="/app", env="MODEL_DIR")
-    model_path: Optional[str] = Field(default=None, env="MODEL_PATH")  # Explicit model path (e.g., /app/best0608.onnx)
-    model_backend: Literal["auto", "openvino"] = Field(
+    ml_model_dir: str = Field(default="/app", env="MODEL_DIR")
+    ml_model_path: Optional[str] = Field(default=None, env="MODEL_PATH")  # Explicit model path (e.g., /app/best0608.onnx)
+    ml_model_backend: Literal["auto", "openvino"] = Field(
         default="openvino", env="MODEL_BACKEND"  # OpenVINO ONLY for server inference
     )
-    model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0608 model requirements
+    ml_model_input_size: int = Field(default=480, env="MODEL_INPUT_SIZE")  # Matches best0608 model requirements
 
     # OpenVINO settings
     openvino_device: str = Field(default="AUTO", env="OPENVINO_DEVICE")
@@ -96,7 +96,11 @@ class Settings(BaseSettings):
     # Health check settings
     healthcheck_timeout: int = Field(default=120, env="HEALTHCHECK_TIMEOUT")
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env", 
+        case_sensitive=False,
+        protected_namespaces=()  # Disable protected namespace warnings
+    )
 
 
 class ModelConfig:
@@ -104,7 +108,7 @@ class ModelConfig:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.base_dir = Path(settings.model_dir)
+        self.base_dir = Path(settings.ml_model_dir)
         self._loaded_model_path: Optional[Path] = None
 
     def set_loaded_model_path(self, model_path: Path) -> None:
@@ -141,8 +145,8 @@ class ModelConfig:
         paths = []
         
         # If MODEL_PATH is explicitly set, prioritize it
-        if self.settings.model_path:
-            paths.append(Path(self.settings.model_path))
+        if self.settings.ml_model_path:
+            paths.append(Path(self.settings.ml_model_path))
         
         # Default search paths
         paths.extend([

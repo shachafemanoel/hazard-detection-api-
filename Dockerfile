@@ -54,15 +54,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python packages from builder stage
 COPY --from=builder /install /usr/local
 
-# Create non-root user for security (before copying files)
-RUN useradd -m -u 1000 appuser
+# Create non-root user with writable home directory
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /home/appuser/.config && \
+    chown -R appuser:appuser /home/appuser
 
 # Copy application code
 COPY --chown=appuser:appuser . .
 
-# Set proper permissions
+# Set proper permissions and create required directories
 RUN chmod -R 755 /app && \
-    find /app -name "*.py" -exec chmod 644 {} \;
+    find /app -name "*.py" -exec chmod 644 {} \; && \
+    mkdir -p /app/models && \
+    chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
@@ -75,7 +79,9 @@ ENV PYTHONPATH=/app \
     MODEL_BACKEND=openvino \
     PORT=8080 \
     HOST=0.0.0.0 \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    YOLO_CONFIG_DIR=/tmp \
+    HOME=/home/appuser
 
 # Expose application port
 EXPOSE 8080
