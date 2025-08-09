@@ -26,7 +26,7 @@ requests==2.31.0
 tqdm==4.66.1
 aiohttp==3.9.1
 redis==5.0.1
-# httpx pinned below 0.27 for compatibility with starlette TestClient
+# httpx for async HTTP client calls (external APIs)
 httpx==0.26.0
 
 # Report management dependencies
