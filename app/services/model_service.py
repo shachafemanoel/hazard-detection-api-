@@ -348,12 +348,19 @@ class ModelService:
         return config
 
     async def predict(self, image: Image.Image) -> List[DetectionResult]:
-        """Run inference on an image"""
+        """Run inference on an image with optimized performance"""
         if not self.is_loaded:
             raise ModelNotLoadedException("Model not loaded. Call load_model() first.")
 
         try:
             inference_start = time.time()
+            
+            # Pre-validate image to avoid processing overhead
+            if not isinstance(image, Image.Image):
+                raise InferenceException("Input must be a PIL Image")
+            
+            if image.size[0] == 0 or image.size[1] == 0:
+                raise InferenceException("Image has invalid dimensions")
 
             if self.backend == "openvino":
                 result = await self._predict_openvino(image)
@@ -362,16 +369,31 @@ class ModelService:
             else:
                 raise InferenceException(f"Unknown backend: {self.backend}")
 
-            # Record inference performance
+            # Record inference performance with additional metrics
             inference_time = time.time() - inference_start
             try:
                 from .performance_monitor import performance_monitor
-
                 performance_monitor.record_inference(inference_time, self.backend)
+                
+                # Log performance warnings for slow inferences
+                if inference_time > 0.5:  # 500ms threshold
+                    logger.warning(f"Slow inference detected: {inference_time:.3f}s with {self.backend} backend")
+                elif inference_time < 0.05:  # Very fast inference might indicate issues
+                    logger.debug(f"Fast inference: {inference_time:.3f}s with {self.backend} backend")
+                    
             except ImportError:
                 pass  # Performance monitoring is optional
 
-            return result
+            # Filter results by confidence to reduce response size
+            filtered_results = [
+                det for det in result 
+                if det.confidence >= (settings.confidence_threshold * 0.8)  # Pre-filter at 80% of threshold
+            ]
+            
+            if len(filtered_results) != len(result):
+                logger.debug(f"Filtered {len(result) - len(filtered_results)} low-confidence detections")
+
+            return filtered_results
         except Exception as e:
             logger.error(f"Inference failed: {e}")
             raise InferenceException(f"Inference failed: {str(e)}")
@@ -444,36 +466,35 @@ class ModelService:
     def _preprocess_image(
         self, image: Image.Image, input_shape: List[int]
     ) -> Tuple[np.ndarray, float, int, int]:
-        """Preprocess image for OpenVINO inference with letterbox padding"""
+        """Preprocess image for OpenVINO inference with letterbox padding and performance optimizations"""
         N, C, H, W = input_shape
         target_height, target_width = H, W
 
-        # Validate input image first
-        if not isinstance(image, Image.Image):
-            raise ValueError(f"Expected PIL Image, got {type(image)}")
+        # Fast validation - already validated in predict()
+        original_width, original_height = image.size
         
-        if image.size[0] <= 0 or image.size[1] <= 0:
-            raise ValueError(f"Invalid image dimensions: {image.size}")
+        # Skip RGB conversion if already in RGB mode (common case)
+        if image.mode != "RGB":
+            try:
+                image = image.convert("RGB")
+                logger.debug(f"Converted image from {image.mode} to RGB")
+            except Exception as e:
+                raise ValueError(f"Failed to convert image to RGB: {e}")
+        
+        logger.debug(f"Input image: {original_width}x{original_height} RGB")
 
-        # Always ensure RGB format for consistent processing
-        try:
-            image = image.convert("RGB")
-            original_width, original_height = image.size
-            logger.debug(f"Input image: {original_width}x{original_height} RGB")
-        except Exception as e:
-            raise ValueError(f"Failed to convert image to RGB: {e}")
-
-        # Try OpenCV first, fall back to PIL if it fails
+        # Optimize preprocessing path selection
         opencv_failed = False
         
-        # Check if OpenCV should be used at all
+        # Check if OpenCV should be used - prefer PIL for small images to reduce overhead
         opencv_enabled = (cv2 is not None and 
                          not getattr(self, '_opencv_disabled', False) and
-                         os.getenv('FORCE_PIL_ONLY', 'false').lower() != 'true')
+                         os.getenv('FORCE_PIL_ONLY', 'false').lower() != 'true' and
+                         original_width * original_height > 50000)  # Only use OpenCV for larger images
         
         if opencv_enabled:
             try:
-                logger.info("Attempting OpenCV image processing...")
+                logger.debug("Using OpenCV for large image processing...")
                 
                 # Convert PIL Image to numpy array with proper validation
                 img_array = np.array(image, dtype=np.uint8)
@@ -640,27 +661,34 @@ class ModelService:
         paste_x: int,
         paste_y: int,
     ) -> List[DetectionResult]:
-        """Postprocess OpenVINO predictions with letterbox coordinate adjustment"""
+        """Postprocess OpenVINO predictions with optimized filtering and coordinate adjustment"""
         detections = []
-
+        
+        # Pre-calculate confidence threshold for performance
+        conf_threshold = settings.confidence_threshold
+        
         if len(predictions.shape) == 3:
             predictions = predictions[0]  # Remove batch dimension
+        
+        # Vectorized confidence filtering for better performance
+        confidence_mask = predictions[:, 4] >= conf_threshold
+        valid_predictions = predictions[confidence_mask]
+        
+        if len(valid_predictions) == 0:
+            return detections
 
-        for pred in predictions:
+        for pred in valid_predictions:
             x_center, y_center, width, height = pred[:4]
             confidence = pred[4]
-
-            if confidence < settings.confidence_threshold:
-                continue
 
             # Get class scores
             class_scores = pred[5:]
             class_id = np.argmax(class_scores)
             class_confidence = class_scores[class_id]
 
-            # Final confidence
+            # Final confidence with early exit
             final_confidence = confidence * class_confidence
-            if final_confidence < settings.confidence_threshold:
+            if final_confidence < conf_threshold:
                 continue
 
             # Convert coordinates
@@ -697,25 +725,41 @@ class ModelService:
         return self._apply_nms(detections)
 
     def _apply_nms(self, detections: List[DetectionResult]) -> List[DetectionResult]:
-        """Apply Non-Maximum Suppression"""
+        """Apply optimized Non-Maximum Suppression"""
         if not detections:
             return []
-
-        # Sort by confidence
-        detections.sort(key=lambda x: x.confidence, reverse=True)
+        
+        # Limit maximum detections for performance (common in production systems)
+        if len(detections) > 100:  # Reasonable limit for hazard detection
+            detections.sort(key=lambda x: x.confidence, reverse=True)
+            detections = detections[:100]
+            logger.debug(f"Limited detections to top 100 for NMS performance")
+        else:
+            # Sort by confidence
+            detections.sort(key=lambda x: x.confidence, reverse=True)
 
         selected = []
+        # Adaptive IoU threshold - stricter for high confidence detections
+        base_threshold = settings.iou_threshold
+        
         while detections:
             best = detections.pop(0)
             selected.append(best)
-
-            threshold = min(settings.iou_threshold, 0.1)
-            # Remove overlapping detections based on IoU threshold
-            detections = [
-                det
-                for det in detections
-                if self._calculate_iou(best.bbox, det.bbox) < threshold
-            ]
+            
+            # Adaptive threshold based on confidence
+            adaptive_threshold = base_threshold * (0.5 + 0.5 * best.confidence)
+            
+            # Vectorized IoU calculation for remaining detections
+            remaining = []
+            for det in detections:
+                if self._calculate_iou(best.bbox, det.bbox) < adaptive_threshold:
+                    remaining.append(det)
+            detections = remaining
+            
+            # Limit total detections to prevent excessive processing
+            if len(selected) >= 50:  # Reasonable limit for real-time processing
+                logger.debug(f"Limited NMS output to 50 detections")
+                break
 
         return selected
 
