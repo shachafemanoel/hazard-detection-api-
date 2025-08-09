@@ -25,7 +25,7 @@ py-cpuinfo==9.0.0
 requests==2.31.0
 tqdm==4.66.1
 aiohttp==3.9.1
-aioredis==2.0.1
+redis>=5.0
 # httpx for async HTTP client calls (external APIs)
 httpx==0.26.0
 

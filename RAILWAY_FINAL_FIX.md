@@ -43,7 +43,7 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=300s --retries=5
 🚀 Starting Hazard Detection API...
 ✅ FastAPI OK
 ✅ OpenVINO OK  
-✅ aioredis OK
+✅ redis OK
 ✅ Config OK
 🚀 Starting main application...
 INFO: Started server process [1]

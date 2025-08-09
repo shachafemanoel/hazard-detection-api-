@@ -4,7 +4,7 @@ Health check and status API endpoints
 
 import platform
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Request
 
 from ..core.config import settings
 from ..core.logging_config import get_logger
@@ -19,32 +19,17 @@ router = APIRouter(prefix="", tags=["health"])
 
 
 @router.get("/health")
-async def health_check():
-    """Enhanced health check endpoint with model status"""
+async def health_check(request: Request):
+    """Basic health check with Redis status"""
+    r = request.app.state.redis
+    ok = True
+    redis_ok = False
     try:
-        # Get model status (don't fail if model service has issues)
-        try:
-            model_status = model_service.get_model_status()
-        except Exception as e:
-            logger.warning(f"Model status check failed: {e}")
-            model_status = "unknown"
-        
-        # Get version info (don't block on git command)
-        version = settings.app_version
-        
-        return {
-            "status": "healthy",
-            "model_status": model_status,  # "not_loaded", "warming", "ready", "error" 
-            "version": version
-        }
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        return {
-            "status": "degraded", 
-            "model_status": "error",
-            "version": settings.app_version,
-            "error": str(e)
-        }
+        pong = await r.ping()
+        redis_ok = bool(pong)
+    except Exception:
+        redis_ok = False
+    return {"ok": ok, "redis": "up" if redis_ok else "down"}
 
 
 @router.options("/health", include_in_schema=False)

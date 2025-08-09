@@ -7,6 +7,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from redis.asyncio import Redis
 
 from .core.config import settings
 from .core.logging_config import get_logger
@@ -27,14 +28,32 @@ logger = get_logger("main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown"""
-    # Startup
+    url = os.getenv("REDIS_URL")
+    if not url:
+        host = os.getenv("REDIS_HOST", "localhost")
+        port = os.getenv("REDIS_PORT", "6379")
+        username = os.getenv("REDIS_USERNAME", "default")
+        password = os.getenv("REDIS_PASSWORD", "")
+        db = os.getenv("REDIS_DB", "0")
+        auth = f"{username}:{password}@" if password else ""
+        url = f"redis://{auth}{host}:{port}/{db}"
+
+    app.state.redis = Redis.from_url(
+        url,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+
+    from .services.report_service import report_service
+
+    report_service.redis_client = app.state.redis
+
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"🌍 Environment: {settings.environment}")
     logger.info(
         f"🔧 Configuration: {settings.ml_model_backend} backend, {settings.openvino_device} device"
     )
 
-    # Initialize model service (async loading)
     try:
         await model_service.load_model()
         logger.info("✅ Model service initialized successfully")
@@ -42,20 +61,17 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Model loading failed during startup: {e}")
         logger.info("🔄 Model will be loaded on first request")
 
-    # Initialize session service
     logger.info("✅ Session service initialized")
 
-    yield
-
-    # Shutdown
-    logger.info("🛑 Shutting down application...")
-
-    # Cleanup old sessions
-    cleaned_sessions = session_service.cleanup_old_sessions(max_age_hours=1)
-    if cleaned_sessions > 0:
-        logger.info(f"🧹 Cleaned up {cleaned_sessions} old sessions")
-
-    logger.info("✅ Shutdown complete")
+    try:
+        yield
+    finally:
+        logger.info("🛑 Shutting down application...")
+        cleaned_sessions = session_service.cleanup_old_sessions(max_age_hours=1)
+        if cleaned_sessions > 0:
+            logger.info(f"🧹 Cleaned up {cleaned_sessions} old sessions")
+        await app.state.redis.aclose()
+        logger.info("✅ Shutdown complete")
 
 
 # Create FastAPI application
