@@ -2,6 +2,8 @@
 
 To integrate the Hazard Detection API into your service, configure the base URL.
 
+For detailed client examples and response handling, see the [Client Guide](CLIENT_GUIDE.md).
+
 ## Base URL
 
 - Production: `https://hazard-api-production-production.up.railway.app`

@@ -3,7 +3,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 
-const API_URL = 'https://hazard-api-production-production.up.railway.app';
+const API_URL = process.env.HAZARD_API_URL || 'https://hazard-api-production-production.up.railway.app';
 
 async function quickDetection() {
   try {
@@ -46,11 +46,18 @@ async function quickDetection() {
 
     // Show each detected hazard
     result.detections.forEach((detection, index) => {
+      const [x1, y1, x2, y2] = detection.bbox;
+      const width = x2 - x1;
+      const height = y2 - y1;
+      const centerX = x1 + width / 2;
+      const centerY = y1 + height / 2;
+
       console.log(`\n🚨 Hazard ${index + 1}:`);
       console.log(`  Type: ${detection.class_name}`);
       console.log(`  Confidence: ${(detection.confidence * 100).toFixed(1)}%`);
-      console.log(`  Location: x=${Math.round(detection.center_x)}, y=${Math.round(detection.center_y)}`);
-      console.log(`  Size: ${Math.round(detection.width)} x ${Math.round(detection.height)} pixels`);
+      console.log(`  Bounding box: [${x1.toFixed(1)}, ${y1.toFixed(1)}] → [${x2.toFixed(1)}, ${y2.toFixed(1)}]`);
+      console.log(`  Center: (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+      console.log(`  Size: ${width.toFixed(1)} x ${height.toFixed(1)} pixels`);
     });
 
     if (result.detections.length === 0) {

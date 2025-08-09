@@ -2,6 +2,8 @@
 
 This guide explains how to retrieve images and model response plots from a live detection session.
 
+For general API usage and sending detection requests, see the [Client Guide](CLIENT_GUIDE.md).
+
 ## Prerequisites
 1. Start a session using `POST /session/start`.
 2. Run detections with `POST /detect/{session_id}` to generate reports.
