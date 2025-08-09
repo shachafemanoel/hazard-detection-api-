@@ -48,7 +48,7 @@ After deployment, check these endpoints in order:
 🔍 Python version: 3.11.x
 ✅ FastAPI OK
 ✅ OpenVINO OK  
-✅ aioredis OK
+✅ redis OK
 ⚠️ Model files: /app/best0408_openvino_model/best0408.xml
 🚀 Starting uvicorn server...
 INFO: Started server process [1]

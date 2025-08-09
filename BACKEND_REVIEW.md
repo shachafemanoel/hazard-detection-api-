@@ -36,7 +36,7 @@ self.redis_client.ping()  # In async setup
 self.redis_client.set(report_key, report_data)  # In async store
 ```
 **Impact:** Blocks event loop on every Redis operation  
-**Fix Required:** Use `aioredis` instead of synchronous redis client
+**Fix Required:** Use `redis.asyncio` instead of synchronous redis client
 
 ### 2. Exception Handling Anti-Patterns
 
@@ -102,11 +102,11 @@ async with httpx.AsyncClient(...) as client:
 
 ### 🚨 **IMMEDIATE** (Blocking Production)
 
-1. **Replace synchronous Redis with aioredis**
+1. **Replace synchronous Redis with redis.asyncio**
 ```python
 # report_service.py:40-71
-import aioredis
-self.redis_client = await aioredis.from_url(settings.redis_url)
+from redis.asyncio import Redis
+self.redis_client = Redis.from_url(settings.redis_url)
 ```
 
 2. **Fix blocking subprocess call**
@@ -180,7 +180,7 @@ async def readiness_check():
 ## Recommendations
 
 ### Infrastructure
-1. Add `aioredis`, `ruff`, `mypy` to `requirements.txt`
+1. Add `redis`, `ruff`, `mypy` to `requirements.txt`
 2. Set up pre-commit hooks for formatting/linting
 3. Add comprehensive test suite
 

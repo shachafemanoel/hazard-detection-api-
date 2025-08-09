@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
-import aioredis
+from redis.asyncio import Redis
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 
@@ -38,16 +38,9 @@ class ReportService:
     """Service for managing hazard detection reports"""
 
     def __init__(self):
-        self.redis_client: Optional[aioredis.Redis] = None
+        self.redis_client: Optional[Redis] = None
         self.geocoder: Optional[Nominatim] = None
-        # Don't setup Redis in __init__ - causes blocking issues in Railway
-        self._redis_setup_attempted = False
         self._setup_geocoder()
-
-    def _setup_redis(self):
-        """Setup Redis connection for report storage (disabled during init to prevent blocking)"""
-        logger.info("🔄 Redis setup deferred to prevent blocking startup")
-        self.redis_client = None
 
     def _setup_geocoder(self):
         """Setup geocoding service (lightweight, non-blocking)"""
@@ -213,7 +206,7 @@ class ReportService:
                 return None
 
             report_key = f"report:{report_id}"
-            report_data = self.redis_client.get(report_key)
+            report_data = await self.redis_client.get(report_key)
             
             if not report_data:
                 return None
@@ -281,7 +274,7 @@ class ReportService:
 
             # Delete from Redis
             report_key = f"report:{report_id}"
-            deleted = self.redis_client.delete(report_key)
+            deleted = await self.redis_client.delete(report_key)
             
             if deleted:
                 logger.info(f"✅ Deleted report {report_id}")
@@ -306,13 +299,13 @@ class ReportService:
                 )
 
             # Get all report keys
-            report_keys = self.redis_client.keys("report:*")
+            report_keys = await self.redis_client.keys("report:*")
             all_reports = []
 
             # Load all reports (for filtering)
             for key in report_keys:
                 try:
-                    report_data = self.redis_client.get(key)
+                    report_data = await self.redis_client.get(key)
                     if report_data:
                         report_dict = json.loads(report_data)
                         report = ReportResponse(**report_dict)
@@ -435,11 +428,11 @@ class ReportService:
         try:
             report_key = f"report:{report.id}"
             report_data = report.json()
-            self.redis_client.set(report_key, report_data)
+            await self.redis_client.set(report_key, report_data)
             
             # Set expiration if configured
             if settings.report_retention_days > 0:
-                self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
+                await self.redis_client.expire(report_key, settings.report_retention_days * 24 * 3600)
 
         except Exception as e:
             logger.error(f"❌ Failed to store report in Redis: {e}")

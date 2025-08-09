@@ -8,7 +8,11 @@ from datetime import datetime
 
 
 # Global model configuration to suppress warnings
-model_config = ConfigDict(protected_namespaces=())
+model_config = ConfigDict(
+    populate_by_name=True,
+    from_attributes=True,
+    protected_namespaces=("__pydantic_",),
+)
 
 # Base response models
 class HealthResponse(BaseModel):
@@ -172,7 +176,8 @@ class DetectionResponse(BaseModel):
         ..., example=150.5, description="Processing time in milliseconds"
     )
     image_size: ImageSize = Field(..., description="Input image dimensions")
-    model_info: ModelInfo = Field(..., description="Model information")
+    model_meta: ModelInfo = Field(..., alias="model_info", description="Model information")
+    model_config = model_config
 
 
 class LegacyDetectionResponse(BaseModel):
@@ -184,7 +189,8 @@ class LegacyDetectionResponse(BaseModel):
         ..., example=150.5, description="Processing time in milliseconds"
     )
     image_size: ImageSize = Field(..., description="Input image dimensions")
-    model_info: ModelInfo = Field(..., description="Model information")
+    model_meta: ModelInfo = Field(..., alias="model_info", description="Model information")
+    model_config = model_config
 
 
 class BatchDetectionResult(BaseModel):
@@ -196,6 +202,7 @@ class BatchDetectionResult(BaseModel):
     detections: Optional[List[Detection]] = Field(None, description="Detected hazards")
     image_size: Optional[ImageSize] = Field(None, description="Input image dimensions")
     error: Optional[str] = Field(None, example="File must be an image")
+    model_config = model_config
 
 
 class BatchDetectionResponse(BaseModel):
@@ -214,7 +221,8 @@ class BatchDetectionResponse(BaseModel):
     successful_count: int = Field(
         ..., example=2, description="Number of successfully processed files"
     )
-    model_info: ModelInfo = Field(..., description="Model information")
+    model_meta: ModelInfo = Field(..., alias="model_info", description="Model information")
+    model_config = model_config
 
 
 # Report action models

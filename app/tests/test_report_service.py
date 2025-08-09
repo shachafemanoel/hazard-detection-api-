@@ -24,8 +24,8 @@ from ..services.model_service import DetectionResult
 def report_service():
     """Create a report service instance for testing"""
     service = ReportService()
-    # Mock Redis for testing
-    service.redis_client = MagicMock()
+    # Mock Redis for testing with async methods
+    service.redis_client = AsyncMock()
     service.redis_client.ping.return_value = True
     return service
 
