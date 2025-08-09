@@ -18,10 +18,38 @@ logger = get_logger("health_api")
 router = APIRouter(prefix="", tags=["health"])
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health_check():
-    """Simple health check endpoint"""
-    return {"status": "healthy"}
+    """Enhanced health check endpoint with model status"""
+    try:
+        # Get model status
+        model_status = model_service.get_model_status()
+        
+        # Get version info (try git first, fall back to config)
+        version = settings.app_version
+        try:
+            import subprocess
+            git_version = subprocess.check_output(
+                ['git', 'rev-parse', '--short', 'HEAD'], 
+                stderr=subprocess.DEVNULL
+            ).decode().strip()
+            version = f"{settings.app_version}-{git_version}"
+        except:
+            pass  # Use config version as fallback
+            
+        return {
+            "status": "healthy",
+            "model_status": model_status,  # "not_loaded", "warming", "ready", "error" 
+            "version": version
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy", 
+            "model_status": "error",
+            "version": settings.app_version,
+            "error": str(e)
+        }
 
 
 @router.options("/health", include_in_schema=False)
