@@ -6,6 +6,7 @@ Includes retries, validation, and MIME type sanitization (B4 requirements)
 import io
 import base64
 import time
+import asyncio
 from typing import Optional, Dict, Any, Tuple, List
 from PIL import Image
 import cloudinary
@@ -136,7 +137,7 @@ class CloudinaryService:
                     # Exponential backoff
                     wait_time = (2 ** (attempt - 1)) * 1
                     logger.info(f"Retrying upload in {wait_time}s (attempt {attempt + 1}/{max_retries + 1})")
-                    time.sleep(wait_time)
+                    await asyncio.sleep(wait_time)
                 
                 result = cloudinary.uploader.upload(image_data, **upload_options)
                 
