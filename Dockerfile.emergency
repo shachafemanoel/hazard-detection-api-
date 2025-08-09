@@ -1,0 +1,43 @@
+# Emergency Railway Dockerfile - Ultra minimal for debugging
+FROM python:3.11.9-slim
+
+WORKDIR /app
+
+# Install only essential system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create user first (Railway requirement)
+RUN useradd -m -u 1000 appuser
+
+# Copy emergency files only
+COPY emergency.py /app/
+COPY startup.sh /app/
+RUN chmod +x /app/startup.sh /app/emergency.py
+
+# Try to copy minimal app, fallback if it fails
+COPY app/__init__.py /app/app/ 2>/dev/null || echo "No app module"
+COPY app/main_minimal.py /app/app/ 2>/dev/null || echo "No minimal app"
+
+# Install minimal FastAPI if possible
+RUN pip install --no-cache-dir fastapi==0.104.1 uvicorn==0.24.0 || echo "FastAPI install failed"
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Environment
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8080
+
+EXPOSE 8080
+
+# Extended health check for debugging
+HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=10 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Always start with our debugging script
+CMD ["/app/startup.sh"]

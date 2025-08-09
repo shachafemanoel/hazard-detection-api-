@@ -1,88 +1,89 @@
 #!/bin/bash
-set -e
 
-echo "🚀 Starting Hazard Detection API..."
+# Don't exit on errors - we want to try multiple fallback modes
+set +e
 
-# Check basic system info
-echo "🔍 System info:"
-echo "Python version: $(python --version)"
-echo "Working directory: $(pwd)"
-echo "User: $(whoami)"
-echo "Python path: $PYTHONPATH"
+echo "🚀 RAILWAY STARTUP DEBUG - $(date)"
+echo "🔍 Container info:"
+echo "  Python: $(python --version 2>&1)"
+echo "  Working dir: $(pwd)"
+echo "  User: $(whoami)"
+echo "  Port from env: ${PORT:-NOT_SET}"
+echo "  Home: ${HOME:-NOT_SET}"
 
-# Test basic imports first
-echo "🔍 Testing basic imports..."
-python -c "
-import sys
-print(f'Python executable: {sys.executable}')
-print(f'Python path: {sys.path[:3]}...')
-
-# Test core dependencies
-try:
-    import fastapi; print('✅ FastAPI OK')
-    import uvicorn; print('✅ Uvicorn OK')  
-    import pydantic; print('✅ Pydantic OK')
-except ImportError as e:
-    print(f'❌ Core import failed: {e}')
-    print('🚨 Starting in minimal mode...')
-    sys.exit(42)  # Special code for minimal mode
-"
-
-# Check import result
-IMPORT_RESULT=$?
-if [ $IMPORT_RESULT -eq 42 ]; then
-    echo "🚨 Core imports failed, starting minimal app..."
-    exec python -m uvicorn app.main_minimal:app --host 0.0.0.0 --port 8080 --log-level info
+# Check if we can even run Python
+if ! python --version >/dev/null 2>&1; then
+    echo "❌ Python not available, starting emergency server"
+    exec python3 /app/emergency.py
 fi
 
-# Test advanced dependencies
-echo "🔍 Testing advanced imports..."
+# Check basic Python functionality
+echo "🔍 Testing Python basics..."
+if ! python -c "print('Python OK')" 2>/dev/null; then
+    echo "❌ Python execution failed, starting emergency server"
+    exec python3 /app/emergency.py
+fi
+
+# Test core imports with detailed error reporting
+echo "🔍 Testing imports..."
 python -c "
 import sys
+import os
+print(f'Python executable: {sys.executable}')
+print(f'Python version: {sys.version}')
+print(f'Current directory: {os.getcwd()}')
+print(f'App directory exists: {os.path.exists(\"/app\")}')
+
+# Test FastAPI import
 try:
-    import openvino; print('✅ OpenVINO OK')
-except ImportError as e:
-    print(f'⚠️ OpenVINO not available: {e}')
+    import fastapi
+    print('✅ FastAPI available')
+    FASTAPI_OK = True
+except Exception as e:
+    print(f'❌ FastAPI failed: {e}')
+    FASTAPI_OK = False
 
+# Test our app import
 try:
-    import aioredis; print('✅ aioredis OK') 
-except ImportError as e:
-    print(f'⚠️ aioredis not available: {e}')
+    from app.main_minimal import app
+    print('✅ Minimal app import OK')
+    MINIMAL_OK = True
+except Exception as e:
+    print(f'❌ Minimal app import failed: {e}')
+    MINIMAL_OK = False
 
-try:
-    from app.core.config import settings; print('✅ Config OK')
-except ImportError as e:
-    print(f'⚠️ Config import failed: {e}')
-"
+# Exit codes: 0=all good, 1=use minimal, 2=use emergency
+if not FASTAPI_OK or not MINIMAL_OK:
+    sys.exit(2)  # Emergency mode
+sys.exit(0)  # Try main app
+" 2>&1
 
-# Check file system
-echo "🔍 Checking file system..."
-echo "App directory contents:"
-ls -la /app/ | head -10
+IMPORT_RESULT=$?
+echo "Import test result: $IMPORT_RESULT"
 
-echo "Model files:"
-find /app -name "*.onnx" -o -name "*.xml" -o -name "*.pt" 2>/dev/null | head -5 || echo "No model files found"
+if [ $IMPORT_RESULT -eq 2 ]; then
+    echo "🚨 Core imports failed - EMERGENCY MODE"
+    echo "Starting emergency server with zero dependencies..."
+    exec python3 /app/emergency.py
+fi
 
-# Environment variables
-echo "🔍 Key environment variables:"
-echo "PORT: ${PORT:-not set}"
-echo "MODEL_DIR: ${MODEL_DIR:-not set}" 
-echo "RAILWAY_ENVIRONMENT_NAME: ${RAILWAY_ENVIRONMENT_NAME:-not set}"
+# Try minimal app first (most likely to work)
+echo "🔍 Attempting minimal app startup..."
+timeout 30s python -m uvicorn app.main_minimal:app \
+    --host 0.0.0.0 \
+    --port 8080 \
+    --log-level info \
+    --access-log 2>&1 &
 
-# Start with timeout to prevent hanging
-echo "🚀 Starting main application..."
-timeout 60s python -c "
-import uvicorn
-print('Starting uvicorn...')
-uvicorn.run(
-    'app.main:app', 
-    host='0.0.0.0', 
-    port=8080,
-    log_level='info',
-    access_log=True
-)
-" || {
-    echo "❌ Main app startup timed out or failed"
-    echo "🚨 Falling back to minimal mode..."
-    exec python -m uvicorn app.main_minimal:app --host 0.0.0.0 --port 8080 --log-level info
-}
+MINIMAL_PID=$!
+sleep 5
+
+# Check if minimal app is running
+if kill -0 $MINIMAL_PID 2>/dev/null; then
+    echo "✅ Minimal app started successfully (PID: $MINIMAL_PID)"
+    wait $MINIMAL_PID
+else
+    echo "❌ Minimal app failed, trying emergency mode"
+    kill $MINIMAL_PID 2>/dev/null
+    exec python3 /app/emergency.py
+fi
