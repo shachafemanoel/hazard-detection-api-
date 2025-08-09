@@ -65,6 +65,7 @@ COPY --chown=appuser:appuser . .
 # Set proper permissions and create required directories
 RUN chmod -R 755 /app && \
     find /app -name "*.py" -exec chmod 644 {} \; && \
+    chmod +x /app/startup.sh && \
     mkdir -p /app/models && \
     chown -R appuser:appuser /app
 
@@ -86,9 +87,9 @@ ENV PYTHONPATH=/app \
 # Expose application port
 EXPOSE 8080
 
-# Health check configuration
-HEALTHCHECK --interval=30s --timeout=15s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+# Health check configuration (extended for model loading)
+HEALTHCHECK --interval=30s --timeout=30s --start-period=300s --retries=5 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Start the application using uvicorn directly for better production control
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+# Start the application with debug startup script
+CMD ["/app/startup.sh"]

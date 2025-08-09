@@ -22,21 +22,16 @@ router = APIRouter(prefix="", tags=["health"])
 async def health_check():
     """Enhanced health check endpoint with model status"""
     try:
-        # Get model status
-        model_status = model_service.get_model_status()
-        
-        # Get version info (try git first, fall back to config)
-        version = settings.app_version
+        # Get model status (don't fail if model service has issues)
         try:
-            import subprocess
-            git_version = subprocess.check_output(
-                ['git', 'rev-parse', '--short', 'HEAD'], 
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
-            version = f"{settings.app_version}-{git_version}"
-        except:
-            pass  # Use config version as fallback
-            
+            model_status = model_service.get_model_status()
+        except Exception as e:
+            logger.warning(f"Model status check failed: {e}")
+            model_status = "unknown"
+        
+        # Get version info (don't block on git command)
+        version = settings.app_version
+        
         return {
             "status": "healthy",
             "model_status": model_status,  # "not_loaded", "warming", "ready", "error" 
@@ -45,7 +40,7 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
-            "status": "unhealthy", 
+            "status": "degraded", 
             "model_status": "error",
             "version": settings.app_version,
             "error": str(e)
@@ -68,6 +63,39 @@ async def root():
         "message": "FastAPI service is running",
         "endpoints": ["/health", "/status", "/session/start", "/detect"],
     }
+
+
+@router.get("/debug")
+async def debug_info():
+    """Debug endpoint for troubleshooting deployment issues"""
+    import os
+    import sys
+    from pathlib import Path
+    
+    try:
+        # Check file system
+        model_files = []
+        try:
+            for path in ["/app/best*", "/app/best*/*"]:
+                files = list(Path("/app").glob(path.replace("/app/", "")))
+                model_files.extend([str(f) for f in files])
+        except Exception as e:
+            model_files = [f"Error scanning: {e}"]
+        
+        return {
+            "python_version": sys.version,
+            "working_directory": os.getcwd(),
+            "environment": dict(os.environ),
+            "model_files_found": model_files,
+            "app_directory_contents": [str(p) for p in Path("/app").glob("*")],
+            "settings": {
+                "ml_model_dir": settings.ml_model_dir,
+                "ml_model_backend": settings.ml_model_backend,
+                "environment": settings.environment,
+            }
+        }
+    except Exception as e:
+        return {"error": str(e), "message": "Debug info failed"}
 
 
 @router.get("/status")
