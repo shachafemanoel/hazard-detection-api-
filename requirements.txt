@@ -12,33 +12,39 @@ numpy==1.26.4
 opencv-python-headless==4.8.1.78
 
 # YOLOv12 and PyTorch (compatible versions for ONNX export)
-ultralytics>=8.3.172
-onnx>=1.15.0
+ultralytics==8.3.172
+onnx==1.15.0
 
 # OpenVINO for optimized inference
-openvino>=2023.1.0
+openvino==2023.1.0
 
 # System and performance monitoring
 py-cpuinfo==9.0.0
 
 # Additional dependencies for complete functionality
-requests>=2.31.0
-tqdm>=4.64.0
-aiohttp>=3.8.0
-redis>=5.0
+requests==2.31.0
+tqdm==4.66.1
+aiohttp==3.9.1
+redis==5.0.1
 # httpx pinned below 0.27 for compatibility with starlette TestClient
-httpx<0.27
+httpx==0.26.0
 
 # Report management dependencies
-cloudinary>=1.36.0
-geopy>=2.4.0
+cloudinary==1.36.0
+geopy==2.4.0
 
 # Testing dependencies
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
-pytest-mock>=3.11.0
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
 
 # Performance monitoring
-psutil>=5.9.0
+psutil==5.9.6
+
+# Development dependencies (optional - install via dev-requirements.txt)
+# ruff==0.1.6
+# black==23.11.0  
+# mypy==1.7.1
+# pre-commit==3.6.0
 

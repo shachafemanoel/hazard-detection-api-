@@ -274,16 +274,31 @@ See [CLIENT_GUIDE.md](CLIENT_GUIDE.md) for a comprehensive client integration gu
 
 ## 🚀 Development
 
+### **Quick Start**
+```bash
+# Install dependencies
+make dev-install
+
+# Run development server
+make run
+
+# Run all checks
+make check-all
+```
+
 ### **Code Quality**
 ```bash
-# Format code
-black app/ main.py --line-length 88
+# Format code with ruff
+make format
 
-# Lint code  
-flake8 app/ main.py
+# Lint code with ruff  
+make lint
 
-# Type checking
-mypy app/ main.py
+# Type checking with mypy
+make typecheck
+
+# Run tests with coverage
+make test
 ```
 
 ### **Adding New Features**
