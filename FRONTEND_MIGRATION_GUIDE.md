@@ -2,6 +2,8 @@
 
 This guide explains how to update the frontend to use the new centralized report management API.
 
+For general client integration and response handling, see the [Client Guide](CLIENT_GUIDE.md).
+
 ## Overview
 
 The report management system has been migrated from the Node.js frontend to the FastAPI backend for:
