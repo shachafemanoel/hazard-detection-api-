@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
-import redis
+import aioredis
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 
@@ -38,7 +38,7 @@ class ReportService:
     """Service for managing hazard detection reports"""
 
     def __init__(self):
-        self.redis_client: Optional[redis.Redis] = None
+        self.redis_client: Optional[aioredis.Redis] = None
         self.geocoder: Optional[Nominatim] = None
         self._setup_redis()
         self._setup_geocoder()

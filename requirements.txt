@@ -15,8 +15,8 @@ opencv-python-headless==4.8.1.78
 ultralytics==8.3.172
 onnx==1.15.0
 
-# OpenVINO for optimized inference
-openvino==2023.1.0
+# OpenVINO for optimized inference (latest LTS version)
+openvino==2024.4.0
 
 # System and performance monitoring
 py-cpuinfo==9.0.0
@@ -25,7 +25,7 @@ py-cpuinfo==9.0.0
 requests==2.31.0
 tqdm==4.66.1
 aiohttp==3.9.1
-redis==5.0.1
+aioredis==2.0.1
 # httpx for async HTTP client calls (external APIs)
 httpx==0.26.0
 

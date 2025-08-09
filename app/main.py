@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"🌍 Environment: {settings.environment}")
     logger.info(
-        f"🔧 Configuration: {settings.model_backend} backend, {settings.openvino_device} device"
+        f"🔧 Configuration: {settings.ml_model_backend} backend, {settings.openvino_device} device"
     )
 
     # Initialize model service (async loading)

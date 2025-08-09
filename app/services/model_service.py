@@ -111,10 +111,10 @@ class ModelService:
             self._load_start_time = time.time()
             logger.info("🚀 Starting OpenVINO model loading...")
             logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
-            logger.info(f"📁 Model directory: {settings.model_dir}")
+            logger.info(f"📁 Model directory: {settings.ml_model_dir}")
             
-            if settings.model_path:
-                logger.info(f"🎯 Target model: {settings.model_path}")
+            if settings.ml_model_path:
+                logger.info(f"🎯 Target model: {settings.ml_model_path}")
 
             # OpenVINO ONLY for server inference - HARD RULE
             if await self._try_load_openvino():
@@ -196,7 +196,7 @@ class ModelService:
             if input_info.partial_shape.is_dynamic:
                 logger.info("🔧 Reshaping dynamic model to static shape...")
                 new_shape = ov.PartialShape(
-                    [1, 3, settings.model_input_size, settings.model_input_size]
+                    [1, 3, settings.ml_model_input_size, settings.ml_model_input_size]
                 )
                 model.reshape({input_info.any_name: new_shape})
 
@@ -310,8 +310,8 @@ class ModelService:
                 logger.info(f"🔄 Trying fallback location: {fallback_dir}")
 
                 # Update paths temporarily
-                old_model_dir = settings.model_dir
-                settings.model_dir = str(fallback_dir)
+                old_model_dir = settings.ml_model_dir
+                settings.ml_model_dir = str(fallback_dir)
                 temp_config = ModelConfig(settings)
 
                 # Try PyTorch first in fallback
@@ -335,7 +335,7 @@ class ModelService:
                             return
 
                 # Restore original model dir
-                settings.model_dir = old_model_dir
+                settings.ml_model_dir = old_model_dir
 
     def _get_openvino_config(self) -> Dict[str, str]:
         """Get OpenVINO compilation configuration"""
@@ -343,7 +343,7 @@ class ModelService:
 
         # Model caching
         if settings.openvino_cache_enabled:
-            cache_dir = Path(settings.model_dir) / "openvino_cache"
+            cache_dir = Path(settings.ml_model_dir) / "openvino_cache"
             cache_dir.mkdir(exist_ok=True)
             config["CACHE_DIR"] = str(cache_dir)
 
@@ -458,7 +458,7 @@ class ModelService:
         
         # Offload CPU-bound PyTorch inference to thread pool
         def _run_pytorch_inference():
-            results = self.model.predict(image, imgsz=settings.model_input_size)
+            results = self.model.predict(image, imgsz=settings.ml_model_input_size)
             detections = []
 
             for r in results:
@@ -820,7 +820,7 @@ class ModelService:
         try:
             logger.info("🔥 Warming up model...")
             # Create a dummy image for warmup
-            dummy_image = Image.new('RGB', (settings.model_input_size, settings.model_input_size), color='black')
+            dummy_image = Image.new('RGB', (settings.ml_model_input_size, settings.ml_model_input_size), color='black')
             
             # Run warmup inference
             warmup_start = time.time()
@@ -894,7 +894,7 @@ class ModelService:
             )
             
             # Verify input size is 480x480
-            input_size_valid = settings.model_input_size == 480
+            input_size_valid = settings.ml_model_input_size == 480
             if self.backend == "openvino" and self.input_layer:
                 # Check actual model input shape
                 input_shape = list(self.input_layer.shape)
@@ -908,7 +908,7 @@ class ModelService:
                 "status": "healthy" if (classes_valid and input_size_valid) else "misconfigured",
                 "model_loaded": True,
                 "backend": self.backend,
-                "input_size": settings.model_input_size,
+                "input_size": settings.ml_model_input_size,
                 "input_size_valid": input_size_valid,
                 "classes": model_config.class_names,
                 "classes_valid": classes_valid,

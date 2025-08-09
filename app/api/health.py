@@ -99,12 +99,12 @@ async def get_detailed_status():
 
         # Model file information
         model_files_info = {
-            "openvino_model": str(settings.model_dir)
+            "openvino_model": str(settings.ml_model_dir)
             + "/best0408_openvino_model/best0408.xml",
-            "pytorch_model": str(settings.model_dir) + "/best.pt",
+            "pytorch_model": str(settings.ml_model_dir) + "/best.pt",
             "current_backend": backend_type,
             "model_classes": len(model_info.get("classes", [])),
-            "input_size": settings.model_input_size,
+            "input_size": settings.ml_model_input_size,
         }
 
         # API endpoints
