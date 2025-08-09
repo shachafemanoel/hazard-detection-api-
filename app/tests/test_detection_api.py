@@ -2,6 +2,7 @@
 Tests for detection API endpoints
 """
 
+import asyncio
 import pytest
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
@@ -371,3 +372,29 @@ def test_detect_performance_tracking(
         assert "processing_time_ms" in data
         assert isinstance(data["processing_time_ms"], (int, float))
         assert data["processing_time_ms"] >= 0
+
+
+@patch("app.services.model_service.model_service")
+def test_detect_timeout_handling(
+    mock_model_service, client: TestClient, sample_session_id, test_image_small
+):
+    """Test detection endpoint timeout handling"""
+    # Mock model service to simulate timeout
+    mock_model_service.is_loaded = True
+    mock_model_service.load_model = AsyncMock(return_value=True)
+    
+    # Create a mock that raises TimeoutError
+    async def timeout_predict(*args):
+        raise asyncio.TimeoutError("Model inference timed out")
+    
+    mock_model_service.predict = timeout_predict
+
+    files = {"file": ("test.jpg", test_image_small, "image/jpeg")}
+
+    response = client.post(f"/detect/{sample_session_id}", files=files)
+    assert response.status_code == 504
+    
+    data = response.json()
+    assert data["detail"]["error"] == "inference_timeout"
+    assert "timeout" in data["detail"]["message"].lower()
+    assert "timeout_ms" in data["detail"]

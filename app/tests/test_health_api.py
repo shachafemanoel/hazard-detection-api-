@@ -7,10 +7,17 @@ from fastapi.testclient import TestClient
 
 
 def test_health_endpoint(client: TestClient):
-    """Test basic health check endpoint"""
+    """Test enhanced health check endpoint with model status"""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert "model_status" in data  # Should be "not_loaded", "warming", "ready", or "error"
+    assert "version" in data
+    
+    # Verify model_status is one of the expected values
+    assert data["model_status"] in ["not_loaded", "warming", "ready", "error"]
 
 
 def test_root_endpoint(client: TestClient):
