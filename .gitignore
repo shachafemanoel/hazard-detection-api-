@@ -63,8 +63,6 @@ coverage.xml
 # Model files (large)
 *.pt
 *.onnx
-*.bin
-*.xml
 models/
 checkpoints/
 
