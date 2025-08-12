@@ -1,19 +1,42 @@
+"""Simple OpenVINO inference utilities."""
+
+import os
+
 import cv2
 import numpy as np
 from openvino.runtime import Core
 
+# Global path to the model file. This allows the model location to be
+# configured via the ``MODEL_PATH`` environment variable while providing a
+# sensible default. All functions and classes in this module refer to this
+# path instead of hardcoding file locations.
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/models/best-11-8-2025.onnx")
+
 
 class ModelInference:
-    def __init__(self, model_path: str, device_name: str = "CPU"):
+    def __init__(self, model_path: str = MODEL_PATH, device_name: str = "CPU"):
+        """Initialize the inference model.
+
+        Parameters
+        ----------
+        model_path: str
+            Path to the model file. Defaults to the module-level ``MODEL_PATH``
+            so that all instances share a consistent global configuration.
+        device_name: str
+            Target device for OpenVINO inference.
+        """
+
         self.class_names = ["crack", "pothole"]
+        self.model_path = model_path
+
         try:
             core = Core()
-            model = core.read_model(model=model_path)
+            model = core.read_model(model=self.model_path)
             self.compiled_model = core.compile_model(model=model, device_name=device_name)
             self.input_layer = self.compiled_model.input(0)
             self.output_layer = self.compiled_model.output(0)
             _, _, self.model_height, self.model_width = self.input_layer.shape
-            print(f"✅ Model '{model_path}' loaded successfully.")
+            print(f"✅ Model '{self.model_path}' loaded successfully.")
         except Exception as e:
             print(f"❌ Failed to load model: {e}")
             self.compiled_model = None
@@ -60,4 +83,4 @@ class ModelInference:
         return self._postprocess(raw_result, scale, pad_dx, pad_dy)
 
 
-inference_handler = ModelInference(model_path="./models/best-11-8-2025.onnx")
+inference_handler = ModelInference()
