@@ -35,6 +35,12 @@ class _APIBase(BaseModel):
     }
 
 
+class V1DetectionResponse(_APIBase):
+    """Simple v1 detection response matching requirements"""
+    filename: str
+    detections: List[Dict[str, Any]]
+
+
 class Base64DetectionRequest(_APIBase):
     image: str  # Base64 encoded image
     confidence_threshold: Optional[float] = 0.5
@@ -553,3 +559,74 @@ async def detect_batch(files: List[UploadFile] = File(...)) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Batch detection error: {e}")
         raise HTTPException(status_code=500, detail=f"Batch detection failed: {str(e)}")
+
+
+@router.post("/api/v1/detect", response_model=V1DetectionResponse)
+async def detect_v1(file: UploadFile = File(...)) -> V1DetectionResponse:
+    """
+    Simple v1 detection endpoint matching original requirements.
+    Accepts an image file via POST and returns JSON with detected hazards.
+    """
+    if not file.filename or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=422, detail="Valid image file required"
+        )
+
+    try:
+        ms = model_service_module.model_service
+        
+        # Ensure model is loaded
+        if not ms.is_loaded:
+            await ms.load_model()
+
+        # Read and process image
+        contents = await file.read()
+        if len(contents) == 0:
+            raise HTTPException(status_code=422, detail="Empty file uploaded")
+
+        try:
+            image = Image.open(BytesIO(contents))
+            image.load()  # Force load to catch corruption
+            
+            # Ensure RGB format
+            if image.mode != 'RGB':
+                image = image.convert("RGB")
+                
+        except Exception as e:
+            raise HTTPException(
+                status_code=422, 
+                detail=f"Invalid image file: {str(e)}"
+            )
+
+        # Run model inference
+        try:
+            detections = await asyncio.wait_for(
+                ms.predict(image), 
+                timeout=30.0
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=504,
+                detail="Model inference timed out"
+            )
+
+        # Format detections for v1 response
+        detection_list = []
+        for detection in detections:
+            detection_dict = detection.to_dict()
+            # Rename bbox to box for consistency with requirements
+            detection_dict["box"] = detection_dict.pop("bbox")
+            detection_list.append(detection_dict)
+
+        return V1DetectionResponse(
+            filename=file.filename,
+            detections=detection_list
+        )
+
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except ModelNotLoadedException as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"V1 detection error: {e}")
+        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")

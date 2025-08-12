@@ -20,7 +20,7 @@ from .services.model_service import model_service
 from .services.session_service import session_service
 from .services.performance_monitor import performance_monitor
 from .services.redis_service import redis_service
-from .api import health, sessions, detection, external_apis, reports
+from .api import health, sessions, detection, external_apis, reports, auth, streaming
 
 logger = get_logger("main")
 
@@ -30,9 +30,19 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown"""
     # Connect report service to the sync Redis client
     from .services.report_service import report_service
+    from .services.streaming_service import StreamingService
     
     # Use the existing sync Redis client from redis_service
     report_service.redis_client = redis_service.get_redis()
+    
+    # Initialize streaming service
+    global streaming_service_instance
+    streaming_service_instance = StreamingService()
+    await streaming_service_instance.initialize()
+    
+    # Make streaming service available to other modules
+    import sys
+    sys.modules[__name__].streaming_service_instance = streaming_service_instance
 
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"🌍 Environment: {settings.environment}")
@@ -56,6 +66,11 @@ async def lifespan(app: FastAPI):
         cleaned_sessions = session_service.cleanup_old_sessions(max_age_hours=1)
         if cleaned_sessions > 0:
             logger.info(f"🧹 Cleaned up {cleaned_sessions} old sessions")
+        
+        # Cleanup streaming service
+        if streaming_service_instance:
+            await streaming_service_instance.cleanup()
+            
         # Cleanup is handled by redis_service
         logger.info("✅ Shutdown complete")
 
@@ -70,12 +85,14 @@ app = FastAPI(
     redoc_url="/redoc" if settings.debug else None,
 )
 
-# Add CORS middleware
+# Add CORS middleware with proper credentials support
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_credentials=True,  # Essential for cookie-based authentication
     allow_methods=settings.cors_methods,
     allow_headers=settings.cors_headers,
+    expose_headers=["Set-Cookie"],  # Allow cookie headers to be accessible
 )
 
 # Add exception handlers
@@ -84,10 +101,12 @@ app.add_exception_handler(HazardDetectionException, hazard_detection_exception_h
 
 # Include API routers
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(sessions.router)
 app.include_router(detection.router)
 app.include_router(reports.router)
 app.include_router(external_apis.router)
+app.include_router(streaming.router)
 
 
 # Add structured request logging and performance monitoring middleware

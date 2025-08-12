@@ -95,6 +95,14 @@ class Settings(BaseSettings):
 
     # Health check settings
     healthcheck_timeout: int = Field(default=120, env="HEALTHCHECK_TIMEOUT")
+    
+    # Streaming settings
+    streaming_session_timeout: int = Field(default=300, env="STREAMING_SESSION_TIMEOUT")
+    streaming_max_fps: int = Field(default=30, env="STREAMING_MAX_FPS")
+    streaming_default_fps: int = Field(default=10, env="STREAMING_DEFAULT_FPS")
+    streaming_queue_size: int = Field(default=50, env="STREAMING_QUEUE_SIZE")
+    streaming_batch_size: int = Field(default=5, env="STREAMING_BATCH_SIZE")
+    streaming_enable_tracking: bool = Field(default=True, env="STREAMING_ENABLE_TRACKING")
 
     model_config = SettingsConfigDict(
         env_file=".env", 

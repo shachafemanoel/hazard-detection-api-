@@ -102,46 +102,87 @@ class ModelService:
         self._opencv_disabled = os.getenv('DISABLE_OPENCV', 'false').lower() == 'true'
 
     async def load_model(self) -> bool:
-        """Load model with OpenVINO backend only"""
+        """Load model with OpenVINO backend only - Enhanced with robust error handling"""
         if self.is_loaded and self._warmup_completed:
+            logger.info("✅ Model already loaded and warmed up")
             return True
 
         try:
             self.model_status = "warming"
             self._load_start_time = time.time()
-            logger.info("🚀 Starting OpenVINO model loading...")
-            logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
-            logger.info(f"📁 Model directory: {settings.ml_model_dir}")
             
+            # Log comprehensive initialization info
+            logger.info("🚀 Starting OpenVINO model initialization...")
+            logger.info(f"🎯 Backend: OpenVINO ONLY (server inference)")
+            logger.info(f"📁 Model directory: {os.path.abspath(settings.ml_model_dir)}")
+            logger.info(f"🔧 Device preference: {settings.openvino_device}")
+            logger.info(f"⚙️ Performance mode: {settings.openvino_performance_mode}")
+            logger.info(f"📐 Input size: {settings.ml_model_input_size}x{settings.ml_model_input_size}")
+            
+            # Check if explicit model path is provided
             if settings.ml_model_path:
-                logger.info(f"🎯 Target model: {settings.ml_model_path}")
+                absolute_model_path = os.path.abspath(settings.ml_model_path)
+                logger.info(f"🎯 Explicit model path: {absolute_model_path}")
+                if not os.path.exists(absolute_model_path):
+                    raise ModelLoadingException(
+                        f"Explicit model path does not exist: {absolute_model_path}. "
+                        f"Please verify the MODEL_PATH environment variable."
+                    )
+
+            # Verify model directory exists
+            if not os.path.exists(settings.ml_model_dir):
+                raise ModelLoadingException(
+                    f"Model directory does not exist: {os.path.abspath(settings.ml_model_dir)}. "
+                    f"Please verify the MODEL_DIR environment variable."
+                )
 
             # OpenVINO ONLY for server inference - HARD RULE
             if await self._try_load_openvino():
                 # Perform warmup inference
                 await self._warmup_model()
                 self.model_status = "ready"
+                
+                load_duration = time.time() - self._load_start_time
+                logger.info(f"✅ Model loaded successfully in {load_duration:.2f}s")
+                logger.info(f"📋 Model info: {self.get_model_info()}")
+                
                 return True
             else:
                 self.model_status = "error"
                 raise ModelLoadingException(
-                    "OpenVINO model loading failed - server requires OpenVINO backend only"
+                    "OpenVINO model initialization failed. "
+                    "Server requires OpenVINO backend. Please check model files and OpenVINO installation."
                 )
+                
+        except ModelLoadingException:
+            # Re-raise our specific exceptions
+            self.model_status = "error"
+            raise
         except Exception as e:
             self.model_status = "error"
-            logger.error(f"Model loading failed: {e}")
-            raise
+            error_msg = (
+                f"Unexpected error during model loading: {str(e)}. "
+                f"Model directory: {os.path.abspath(settings.ml_model_dir)}, "
+                f"OpenVINO available: {ov is not None}"
+            )
+            logger.error(error_msg, exc_info=True)
+            raise ModelLoadingException(error_msg)
 
     async def _try_load_openvino(self) -> bool:
-        """Try to load OpenVINO model"""
+        """Try to load OpenVINO model with enhanced error handling"""
         # Check if OpenVINO is disabled via environment variable
         if os.getenv('DISABLE_OPENVINO', 'false').lower() == 'true':
-            logger.info("📝 OpenVINO disabled by DISABLE_OPENVINO environment variable")
-            return False
+            logger.warning("📝 OpenVINO disabled by DISABLE_OPENVINO environment variable")
+            raise ModelLoadingException(
+                "OpenVINO is disabled by environment variable, but server requires OpenVINO backend"
+            )
             
         if ov is None:
-            logger.info("OpenVINO not available - skipping")
-            return False
+            logger.error("❌ OpenVINO library not available")
+            raise ModelLoadingException(
+                "OpenVINO library not found. Please install OpenVINO Runtime. "
+                "See: https://docs.openvino.ai/latest/openvino_docs_install_guides_overview.html"
+            )
 
         try:
             # Check CPU compatibility
@@ -156,37 +197,61 @@ class ModelService:
             logger.info("🔄 Attempting OpenVINO model loading...")
 
             # Initialize OpenVINO Core
-            core = ov.Core()
-            devices = core.available_devices
-            logger.info(f"Available OpenVINO devices: {devices}")
+            try:
+                core = ov.Core()
+                devices = core.available_devices
+                logger.info(f"Available OpenVINO devices: {devices}")
+            except Exception as e:
+                raise ModelLoadingException(
+                    f"Failed to initialize OpenVINO Core: {str(e)}. "
+                    f"This may indicate an OpenVINO installation issue."
+                )
 
             # Find model file
             model_path = None
+            available_paths = []
+            
             for path in model_config.openvino_model_paths:
+                available_paths.append(str(path))
                 if path.exists():
                     model_path = path
-                    logger.info(f"📄 Found OpenVINO model at: {model_path}")
+                    logger.info(f"📄 Found OpenVINO model at: {path}")
                     break
 
             if not model_path:
-                logger.info("No OpenVINO model files (.xml/.onnx) found")
-                return False
+                logger.error("❌ No OpenVINO model files found")
+                raise ModelLoadingException(
+                    f"No OpenVINO model files (.xml/.onnx) found in searched paths: "
+                    f"{', '.join(available_paths)}. Please ensure model files are present."
+                )
 
-            # For .xml files, verify .bin file exists
+            # Validate model file format and dependencies
             if model_path.suffix == ".xml":
                 bin_path = model_path.with_suffix(".bin")
                 if not bin_path.exists():
-                    logger.warning(f"Missing .bin file: {bin_path}")
-                    return False
+                    raise ModelLoadingException(
+                        f"Missing .bin file for OpenVINO IR model. "
+                        f"Expected: {bin_path}. Both .xml and .bin files are required."
+                    )
+                logger.info(f"📄 Using OpenVINO IR model: {model_path}")
             elif model_path.suffix == ".onnx":
-                logger.info("Loading ONNX model directly with OpenVINO")
+                logger.info(f"📄 Using ONNX model with OpenVINO: {model_path}")
             else:
-                logger.warning(f"Unsupported model format: {model_path.suffix}")
-                return False
+                raise ModelLoadingException(
+                    f"Unsupported model format: {model_path.suffix}. "
+                    f"Supported formats: .xml (OpenVINO IR) or .onnx"
+                )
 
             # Load and configure model
-            logger.info(f"📄 Loading model from: {model_path}")
-            model = core.read_model(model=str(model_path))
+            logger.info(f"📖 Reading model from: {model_path}")
+            try:
+                model = core.read_model(model=str(model_path))
+                logger.info("✅ Model file read successfully")
+            except Exception as e:
+                raise ModelLoadingException(
+                    f"Failed to read model file {model_path}: {str(e)}. "
+                    f"Please verify the model file is valid and not corrupted."
+                )
             
             # Track loaded model path
             model_config.set_loaded_model_path(model_path)
@@ -201,21 +266,48 @@ class ModelService:
                 model.reshape({input_info.any_name: new_shape})
 
             # Configure compilation
-            config = self._get_openvino_config()
+            try:
+                config = self._get_openvino_config()
+                logger.info(f"⚙️ Compiling model for {settings.openvino_device} device...")
+            except Exception as e:
+                raise ModelLoadingException(f"Failed to create OpenVINO config: {str(e)}")
 
-            # Compile model
-            logger.info(f"⚙️ Compiling model for {settings.openvino_device} device...")
-            compiled_model = core.compile_model(
-                model=model, device_name=settings.openvino_device, config=config
-            )
+            # Compile model with enhanced error handling
+            try:
+                compiled_model = core.compile_model(
+                    model=model, device_name=settings.openvino_device, config=config
+                )
+                logger.info("✅ Model compilation successful")
+            except Exception as e:
+                # Provide specific guidance based on device type
+                if "GPU" in str(settings.openvino_device).upper():
+                    error_detail = (
+                        f"GPU device compilation failed: {str(e)}. "
+                        f"Try setting OPENVINO_DEVICE=CPU or install GPU drivers."
+                    )
+                else:
+                    error_detail = (
+                        f"Model compilation failed for device {settings.openvino_device}: {str(e)}. "
+                        f"Try setting OPENVINO_DEVICE=AUTO or check OpenVINO device compatibility."
+                    )
+                raise ModelLoadingException(error_detail)
 
             # Set up inference components
-            self.compiled_model = compiled_model
-            self.input_layer = compiled_model.input(0)
-            self.output_layer = compiled_model.output(0)
-
-            if settings.openvino_async_inference:
-                self.infer_request = compiled_model.create_infer_request()
+            try:
+                self.compiled_model = compiled_model
+                self.input_layer = compiled_model.input(0)
+                self.output_layer = compiled_model.output(0)
+                
+                # Log input/output tensor names as required
+                logger.info(f"📋 Model input tensor: {self.input_layer.any_name}")
+                logger.info(f"📋 Model output tensor: {self.output_layer.any_name}")
+                
+                if settings.openvino_async_inference:
+                    self.infer_request = compiled_model.create_infer_request()
+                    logger.info("✅ Async inference request created")
+                    
+            except Exception as e:
+                raise ModelLoadingException(f"Failed to set up inference components: {str(e)}")
 
             # Mark as loaded
             self.backend = "openvino"
@@ -236,9 +328,15 @@ class ModelService:
 
             return True
 
+        except ModelLoadingException:
+            # Re-raise our custom exceptions
+            raise
         except Exception as e:
-            logger.error(f"OpenVINO model loading failed: {e}")
-            return False
+            logger.error(f"Unexpected error during OpenVINO model loading: {e}", exc_info=True)
+            raise ModelLoadingException(
+                f"Unexpected error during OpenVINO initialization: {str(e)}. "
+                f"Check model files, OpenVINO installation, and system compatibility."
+            )
 
     async def _try_load_pytorch(self) -> bool:
         """Try to load PyTorch model"""

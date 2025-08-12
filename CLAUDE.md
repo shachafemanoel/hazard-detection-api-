@@ -1,142 +1,185 @@
-# CLAUDE.md — Server Repo (hazard-detection-api-)
+# CLAUDE.md
 
-> Root: `/Users/shachafemanoel/Documents/api/hazard-detection-api-`
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This file defines specialized Claude Code agents for the **FastAPI + OpenVINO** backend. Includes a **Work Manager** and an **Integration Specialist** focused on contract alignment with the client repo.
+## Development Commands
 
-## Shared Context
+### Core Development
+```bash
+# Install dependencies
+make dev-install
 
-- **Health:** `/health`, `/ready`
-- **Reports:** `POST /report`, `GET /session/{id}/reports`, `GET /session/{id}/summary`, `POST /session/{id}/report/{rid}/confirm|dismiss`
-- **Redis Keys:** `report:{uuid}`, `session:{id}:reports`
-- **Model Path:** `MODEL_PATH=/app/best0608.onnx`
-- **Guardrails:** Small commits, no secrets, backward compatibility, add tests, ask unclear in `QUESTIONS.md`.
+# Start development server
+make run
+# Or directly: python main.py
 
-## Environment Keys
-
-```
-REDIS_HOST=...
-REDIS_PORT=6379
-REDIS_USERNAME=default
-REDIS_PASSWORD=...
-CLOUDINARY_CLOUD_NAME=...
-CLOUDINARY_API_KEY=...
-CLOUDINARY_API_SECRET=...
-ALLOWED_ORIGINS=https://hazard-detection-production-8735.up.railway.app
-MODEL_PATH=/app/best0608.onnx
+# Run all quality checks
+make check-all
 ```
 
----
+### Code Quality
+```bash
+# Format code
+make format
+# Runs: black app/ main.py && ruff format app/ main.py
 
-## Agent 0 — Work Manager (Server Lead)
+# Lint code  
+make lint
+# Runs: ruff check app/ main.py
 
-**Goal:** Plan → Assign → Verify → Commit & Push.
+# Type checking
+make typecheck
+# Runs: mypy app/ main.py
+```
 
-**Scope:** Whole repo; coordinates Agents B, C, D, G, X.
+### Testing
+```bash
+# Run all tests
+make test
+# Or: pytest -v
 
-**Process:**
+# Run tests with coverage
+make test-cov
+# Or: pytest --cov=app --cov-report=html --cov-report=term
 
-1. Create `TASKS.md` with a checklist and owners.
-2. Delegate to agents; run unit/API tests.
-3. Verify acceptance, then push commits and open PRs.
+# Run specific test files
+pytest app/tests/test_detection_api.py -v
+pytest app/tests/test_model_service.py -v
+```
 
-**Deliverables:** `TASKS.md`, PRs, `REPORT.md` with API latencies and pass/fail summaries.
+### Docker
+```bash
+# Build Docker image
+make docker-build
 
----
+# Run Docker container
+make docker-run
+```
 
-## Agent B — API Persistence & Session Summary
+## Architecture Overview
 
-**Files:**
+This is a FastAPI-based road hazard detection service using computer vision models (YOLOv12n) with OpenVINO optimization.
 
-- `app/routers/session.py`, `app/routers/report.py`
-- `app/services/report_service.py`, `app/services/redis_service.py`
-- `app/models/schemas.py`, `app/core/config.py`
+### Core Architecture
 
-**Tasks:**
+**Service-Oriented Design**: The application follows a modular service architecture with clear separation of concerns:
 
-1. Ensure `POST /report` stores `report:{uuid}` with `cloudinaryUrl`, and `RPUSH session:{id}:reports`.
-2. `GET /session/{id}/reports` and `/summary` return full objects (incl. URLs + aggregates).
-3. Add retries for Cloudinary and MIME validation.
+- **API Layer** (`app/api/`): Route definitions and request handling
+- **Services Layer** (`app/services/`): Business logic and external integrations  
+- **Core Layer** (`app/core/`): Shared utilities, configuration, exceptions
+- **Models Layer** (`app/models/`): Pydantic models for validation
 
-**Acceptance:** `/health` & `/ready` green; summary contains Cloudinary URLs; data types validated.
+### Key Services
 
-**Deliverables:** code + `tests/test_report_flow.py` + README snippet.
+**Model Service** (`app/services/model_service.py`): 
+- Handles OpenVINO and PyTorch model loading with intelligent backend selection
+- Manages YOLOv12n model for 2-class detection: "crack" and "pothole"
+- Supports FP16/FP32 OpenVINO models in `/app/server/openvino_fp16/` and `/app/server/openvino_fp32/`
+- Falls back gracefully between backends
 
----
+**Session Service** (`app/services/session_service.py`):
+- Manages stateful detection sessions with tracking
+- Handles session lifecycle and cleanup
 
-## Agent C — Model Integration (best0608)
+**Report Service** (`app/services/report_service.py`):
+- Manages detection reports with Redis persistence
+- Integrates with Cloudinary for image storage
+- Supports geocoding via Google Maps API
 
-**Files:**
+**Redis Service** (`app/services/redis_service.py`):
+- Provides synchronous Redis client for report storage
+- Handles connection management and error handling
 
-- `app/services/model_service.py`
-- `app/core/config.py`, `.env.example`
-- `scripts/verify_onnx.py` **(new)**
+**Streaming Service** (`app/services/streaming_service.py`):
+- Manages real-time WebSocket and SSE connections for live detection
+- Handles frame processing queues and connection lifecycle
+- Supports configurable FPS limits and quality settings
 
-**Tasks:**
+**SSE Service** (`app/services/sse_service.py`):
+- Server-Sent Events for real-time streaming without WebSocket complexity
+- HTTP-based streaming for broad client compatibility
 
-1. Load `MODEL_PATH` best0608; verify input 1×3×480×480 and output shape `(1,300,6)`.
-2. Align class ids/names with client hazard classes; expose names in `/status`.
-3. Provide `scripts/verify_onnx.py` (OpenVINO or onnxruntime) to print IO and run a dummy inference.
+### Configuration System
 
-**Acceptance:** model warms on startup; `/status` shows best0608 loaded; verify script runs.
+**Environment-Based Config** (`app/core/config.py`):
+- Uses Pydantic Settings for type-safe configuration
+- Supports `.env` files and environment variables
+- Key settings: `MODEL_BACKEND`, `MODEL_DIR`, `OPENVINO_DEVICE`
 
-**Deliverables:** code + script + log snippet.
+**Model Configuration**:
+- Primary model location: `/app/server/openvino_fp16/best.xml`
+- Fallback locations include FP32 models and legacy paths
+- Input size: 640x640 for YOLOv12n model
+- Supports 2-class detection: "crack" and "pothole"
 
----
+### Testing Architecture
 
-## Agent D — Code Cleanup (Server)
+**Comprehensive Test Suite** (`app/tests/`):
+- Unit tests for services with extensive mocking
+- Integration tests for API endpoints  
+- Fixtures in `conftest.py` for reusable test data
+- 90%+ coverage target with pytest-cov
 
-**Files:**
+### Deployment
 
-- Remove unused routers/services: `app/routers/*` not mounted in `app/main.py`, `*_old.py`, `experimental_*.py`
-- Remove `notebooks/`, `experiments/`, caches `**/__pycache__/**`
+**Railway Deployment**: Configured via `railway.toml`
+- Uses Nixpacks builder
+- Health checks on `/health` endpoint  
+- Environment variables for production configuration
 
-**Tasks:**
+**Docker Support**: Multi-stage Dockerfile with OpenVINO optimization
+- Efficient model loading and caching
+- Production-ready container setup
 
-1. Use `rg` to confirm no imports; delete and update `.gitignore`.
+## Important Implementation Notes
 
-**Acceptance:** tests still pass; no import errors.
+### Model Loading
+- OpenVINO is the primary backend for server inference
+- Models are loaded asynchronously during startup
+- Graceful fallback if model loading fails initially
 
-**Deliverables:** PR `chore(server): remove obsolete files`.
+### Error Handling
+- Custom exceptions in `app/core/exceptions.py`
+- Structured error responses with correlation IDs
+- Performance monitoring with request/response logging
 
----
+### Session Management
+- Sessions track detection history and generate reports
+- Automatic cleanup of old sessions (configurable)
+- Redis-backed persistence for scalability
 
-## Agent G — Health/Ready, Observability & CI
+### Performance Monitoring
+- Built-in performance metrics collection
+- Request timing and success rate tracking
+- Resource utilization monitoring
 
-**Files:**
+## File Structure Patterns
 
-- `app/main.py` (lifespan), `app/core/config.py`
-- `tests/test_health.py`, `tests/test_summary.py`
-- `.github/workflows/api.yml` **(new)**
+When adding new functionality:
+- **API endpoints**: Add to `app/api/` with route definitions only
+- **Business logic**: Implement in `app/services/` 
+- **Data models**: Define in `app/models/` using Pydantic
+- **Tests**: Mirror structure in `app/tests/test_*.py`
+- **Configuration**: Extend `app/core/config.py` for new settings
 
-**Tasks:**
+## External Integrations
 
-1. Ensure `/health` liveness and `/ready` checks model + Redis + Cloudinary.
-2. Add structured logging (request id + timing) for detect/report endpoints.
-3. CI workflow running `pytest`, packaging, and optionally Railway preview deploy.
+- **Google Maps API**: For geocoding services
+- **Cloudinary**: For image storage and management  
+- **Redis**: For session and report persistence
+- **Railway**: Primary deployment platform
 
-**Acceptance:** health/ready pass; CI green; logs show latencies.
+## Streaming and Real-Time Features
 
-**Deliverables:** CI file + tests + README CI section.
+**WebSocket Support** (`app/api/streaming.py`):
+- Real-time bidirectional streaming for live video feeds
+- Configurable FPS limits and processing queues
+- Connection health monitoring and automatic reconnection
 
----
+**Server-Sent Events (SSE)**:
+- HTTP-based streaming for broader client compatibility
+- Real-time detection results without WebSocket complexity
 
-## Agent X — Integration Specialist (Server‑oriented)
-
-**Goal:** Own **integration with the Client repo** from the server side.
-
-**Files:**
-
-- `app/routers/report.py`, `app/routers/session.py`
-- `app/models/schemas.py`
-
-**Tasks:**
-
-1. Confirm response JSON matches client expectations (fields and nesting), especially `image.url`.
-2. Validate CORS/ALLOWED\_ORIGINS; coordinate with client `VITE_API_BASE`.
-3. Maintain a contract doc `schemas/server-api.md` mirrored with client `schemas/client-api.md`.
-
-**Acceptance:** No schema mismatches; E2E client flow passes against live Railway.
-
-**Deliverables:** `schemas/server-api.md` + PR notes.
-
+**Authentication** (`app/api/auth.py`):
+- JWT token-based authentication system
+- Session-based access control for streaming endpoints

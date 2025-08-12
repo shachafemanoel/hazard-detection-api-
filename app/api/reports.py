@@ -5,7 +5,8 @@ Report API endpoints for hazard detection reports
 import asyncio
 import time
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Form, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..core.config import settings
@@ -21,6 +22,7 @@ from ..models.report_models import (
     ReportStatus
 )
 from ..services.report_service import report_service
+from ..services.sse_service import sse_service
 
 logger = get_logger("reports_api")
 
@@ -63,6 +65,14 @@ async def create_report(request: ReportCreateRequest) -> ReportResponse:
                 raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
         report = await report_service.create_report(request)
+        
+        # Broadcast SSE event for new report (non-blocking)
+        try:
+            report_dict = report.model_dump() if hasattr(report, 'model_dump') else report.dict()
+            await sse_service.broadcast_report_created(report_dict)
+        except Exception as e:
+            # Don't fail the request if SSE fails
+            logger.warning(f"Failed to broadcast report creation event: {e}")
         
         processing_time = round((time.time() - start_time) * 1000, 2)
         logger.info(f"Created report {report.id} in {processing_time}ms")
@@ -252,6 +262,14 @@ async def update_report(report_id: str, request: ReportUpdateRequest) -> ReportR
         if not report:
             raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
         
+        # Broadcast SSE event for report update (non-blocking)
+        try:
+            report_dict = report.model_dump() if hasattr(report, 'model_dump') else report.dict()
+            await sse_service.broadcast_report_updated(report_dict)
+        except Exception as e:
+            # Don't fail the request if SSE fails
+            logger.warning(f"Failed to broadcast report update event: {e}")
+        
         processing_time = round((time.time() - start_time) * 1000, 2)
         logger.info(f"Updated report {report_id} in {processing_time}ms")
         
@@ -278,6 +296,13 @@ async def delete_report(report_id: str) -> Dict[str, Any]:
         success = await report_service.delete_report(report_id)
         if not success:
             raise HTTPException(status_code=404, detail=f"Report {report_id} not found")
+        
+        # Broadcast SSE event for report deletion (non-blocking)
+        try:
+            await sse_service.broadcast_report_deleted(report_id)
+        except Exception as e:
+            # Don't fail the request if SSE fails
+            logger.warning(f"Failed to broadcast report deletion event: {e}")
         
         processing_time = round((time.time() - start_time) * 1000, 2)
         logger.info(f"Deleted report {report_id} in {processing_time}ms")
@@ -430,3 +455,48 @@ async def upload_report_with_file(
     except Exception as e:
         logger.error(f"Report upload failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create report from upload: {str(e)}")
+
+
+@router.get("/events")
+async def reports_events_stream(request: Request):
+    """
+    Server-Sent Events (SSE) endpoint for real-time report updates
+    
+    Provides a persistent connection for dashboard clients to receive
+    real-time notifications about new reports, updates, and deletions.
+    """
+    try:
+        # Connect client to SSE service
+        client_id = await sse_service.connect_client(request)
+        
+        logger.info(f"📡 New SSE client connected for reports: {client_id}")
+        
+        # Return streaming response with proper headers
+        return StreamingResponse(
+            sse_service.get_client_stream(client_id),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control",
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"SSE connection failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to establish SSE connection: {str(e)}")
+
+
+@router.get("/events/stats")
+async def sse_stats():
+    """
+    Get SSE service statistics
+    Returns information about active connections and service status
+    """
+    try:
+        stats = sse_service.get_stats()
+        return {"sse_stats": stats}
+    except Exception as e:
+        logger.error(f"Failed to get SSE stats: {e}")
+        return {"error": str(e), "sse_stats": {}}

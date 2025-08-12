@@ -1,0 +1,156 @@
+.
+├── .DS_Store
+├── .claude
+│   ├── CLAUDE.md
+│   ├── agents
+│   │   ├── detection-engine-lead.md
+│   │   ├── fe-platform-lead.md
+│   │   ├── interface-contracts-owner.md
+│   │   ├── node-server-lead.md
+│   │   ├── orchestration-lead.md
+│   │   ├── program-director.md
+│   │   ├── qa-release-lead.md
+│   │   ├── repo-sweeper-api.md
+│   │   └── reports-data-lead.md
+│   └── settings.local.json
+├── .dockerignore
+├── .env.example
+├── .gitattributes
+├── .github
+│   └── workflows
+│       └── ci.yml
+├── .gitignore
+├── .pre-commit-config.yaml
+├── 2025-08-09-backend-diff-aware-review-async-blocking-audit.txt
+├── 2025-08-09-caveat-the-messages-below-were-generated-by-the-u.txt
+├── AIOREDIS_FIX_SUMMARY.md
+├── API_FETCH_GUIDE.md
+├── API_IMPLEMENTATION_SUMMARY.md
+├── BACKEND_REVIEW.md
+├── CHANGELOG.md
+├── CLIENT_GUIDE.md
+├── Dockerfile
+├── Dockerfile.emergency
+├── ENDPOINTS_GUIDE.md
+├── FRONTEND_MIGRATION_GUIDE.md
+├── GEMINI.md
+├── IMPROVEMENT_PLAN.md
+├── Makefile
+├── NODEJS_INTEGRATION_GUIDE.md
+├── OPENVINO_VALIDATION_REPORT.md
+├── PLAN.md
+├── QUESTIONS.md
+├── RAILWAY_DEPLOYMENT.md
+├── RAILWAY_DEPLOY_FIXES.md
+├── RAILWAY_EMERGENCY_FIX.md
+├── RAILWAY_FINAL_FIX.md
+├── RAILWAY_HEALTHCHECK_FIX.md
+├── README.md
+├── REALTIME_STREAMING_GUIDE.md
+├── REFACTOR_SUMMARY.md
+├── SERVICE_INTEGRATION.md
+├── TASKS.md
+├── aioredis_fix.patch
+├── app
+│   ├── __init__.py
+│   ├── __pycache__
+│   │   ├── __init__.cpython-313.pyc
+│   │   └── main_b3.cpython-313.pyc
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── detection.py
+│   │   ├── external_apis.py
+│   │   ├── health.py
+│   │   ├── reports.py
+│   │   └── sessions.py
+│   ├── core
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── config.py
+│   │   ├── exceptions.py
+│   │   └── logging_config.py
+│   ├── main.py
+│   ├── main_b3.py
+│   ├── main_minimal.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── api_models.py
+│   │   ├── report_models.py
+│   │   └── schemas.py
+│   ├── routers
+│   │   ├── __init__.py
+│   │   ├── detect.py
+│   │   ├── report.py
+│   │   └── session.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── __pycache__
+│   │   ├── cloudinary_service.py
+│   │   ├── model_service.py
+│   │   ├── performance_monitor.py
+│   │   ├── redis_service.py
+│   │   ├── report_service.py
+│   │   ├── report_service_b3.py
+│   │   ├── session_service.py
+│   │   └── sse_service.py
+│   └── tests
+│       ├── __init__.py
+│       ├── conftest.py
+│       ├── test_detection_api.py
+│       ├── test_health_api.py
+│       ├── test_model_info_alias.py
+│       ├── test_model_service.py
+│       ├── test_performance_monitor.py
+│       ├── test_report_service.py
+│       ├── test_session_api.py
+│       └── test_structured_logging.py
+├── best (13)_openvino_model
+│   ├── best (13).bin
+│   ├── best (13).xml
+│   └── metadata.yaml
+├── best.pt
+├── best0408_openvino_model
+│   ├── best0408.bin
+│   ├── best0408.xml
+│   └── metadata.yaml
+├── build-api.sh
+├── deploy_railway.sh
+├── dev-requirements.txt
+├── emergency.py
+├── examples
+│   ├── README.md
+│   ├── batchProcessing.js
+│   ├── package.json
+│   ├── quickStart.js
+│   ├── realTimeMonitoring.js
+│   ├── report_management_example.py
+│   └── sessionExample.js
+├── hazard-detection-api-.code-workspace
+├── main.py
+├── project_tree.txt
+├── pyproject.toml
+├── pytest.ini
+├── railway.toml
+├── requirements.txt
+├── scripts
+│   └── verify_onnx.py
+├── server
+│   ├── .DS_Store
+│   ├── openvino_fp16
+│   │   ├── best.bin
+│   │   ├── best.xml
+│   │   └── metadata.yaml
+│   └── openvino_fp32
+│       ├── best.bin
+│       ├── best.xml
+│       └── metadata.yaml
+├── startup.sh
+├── test-opencv-fix.js
+└── tests
+    ├── test_detection_b3.py
+    ├── test_health_b3.py
+    ├── test_report_flow_b3.py
+    └── test_services_b3.py
+
+23 directories, 131 files
