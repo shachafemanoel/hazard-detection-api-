@@ -1,26 +1,26 @@
-"""
-Main entry point for the Hazard Detection API
-Imports the refactored modular application
-"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.v1 import endpoints
 
-if __name__ == "__main__":
-    from app.main import app
-    from app.core.logging_config import get_logger
-    import uvicorn
-    import os
+app = FastAPI(title="Hazard Detection API", version="1.0.0")
 
-    logger = get_logger("main")
-    port = int(os.getenv("PORT", 8080))
-    host = os.getenv("HOST", "0.0.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    logger.info(f"🚀 Starting Hazard Detection API on {host}:{port}")
-    logger.info("📚 API Documentation available at: /docs")
 
-    uvicorn.run(
-        "app.main:app",
-        host=host,
-        port=port,
-        log_level="info",
-        access_log=True,
-        reload=False,
-    )
+@app.get("/api/v1/health", tags=["Health"])
+def health_check():
+    return {"status": "ok"}
+
+
+app.include_router(endpoints.router, prefix="/api/v1", tags=["Detection"])
+
+
+@app.get("/", tags=["Root"])
+def read_root():
+    return {"status": "API is running"}
